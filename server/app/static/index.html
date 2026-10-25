@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#22553a">
+  <title>Kiwi Calendar</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Kiwi Calendar</span>
+  </div>
+  <header class="masthead">
+    <div class="date-block" aria-hidden="true">
+      <span class="date-day" id="today-day"></span>
+    </div>
+    <div class="date-words">
+      <span class="date-weekday" id="today-weekday"></span>
+      <span class="date-month" id="today-month"></span>
+    </div>
+  </header>
+
+  <main>
+    <section id="login" class="panel" hidden>
+      <h1>Connect to your calendar</h1>
+      <p class="muted" id="login-message">Scan the QR code on the calendar, or enter the access token from the server log.</p>
+      <form id="login-form" class="stack">
+        <label>Access token
+          <input name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+        </label>
+        <button type="submit">Connect</button>
+      </form>
+    </section>
+
+    <div id="app" hidden>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button role="tab" id="tab-btn-add" aria-controls="tab-add" data-tab="add">Add</button>
+        <button role="tab" id="tab-btn-upcoming" aria-controls="tab-upcoming" data-tab="upcoming">Coming up</button>
+        <button role="tab" id="tab-btn-photos" aria-controls="tab-photos" data-tab="photos">Photos</button>
+        <button role="tab" id="tab-btn-calendars" aria-controls="tab-calendars" data-tab="calendars">Calendars</button>
+      </nav>
+
+      <section id="tab-add" role="tabpanel" aria-labelledby="tab-btn-add" class="panel">
+        <form id="event-form" class="stack">
+          <label>What
+            <input name="title" required maxlength="200" placeholder="Soccer practice">
+          </label>
+          <div class="row">
+            <label class="grow">Day
+              <input type="date" name="date" required>
+            </label>
+            <label class="check">
+              <input type="checkbox" name="all_day"> All day
+            </label>
+          </div>
+          <div class="row" id="time-row">
+            <label class="grow">Starts
+              <input type="time" name="start" value="09:00">
+            </label>
+            <label class="grow">Ends
+              <input type="time" name="end" value="10:00">
+            </label>
+          </div>
+          <label><span>Where <span class="optional">optional</span></span>
+            <input name="location" maxlength="300">
+          </label>
+          <label><span>Notes <span class="optional">optional</span></span>
+            <textarea name="notes" rows="2" maxlength="4000"></textarea>
+          </label>
+          <fieldset class="swatches" id="event-colors">
+            <legend>Color</legend>
+          </fieldset>
+          <button type="submit">Add event</button>
+        </form>
+      </section>
+
+      <section id="tab-upcoming" role="tabpanel" aria-labelledby="tab-btn-upcoming" class="panel" hidden>
+        <div id="upcoming-list" class="agenda"></div>
+      </section>
+
+      <section id="tab-photos" role="tabpanel" aria-labelledby="tab-btn-photos" class="panel" hidden>
+        <h2>Shared album</h2>
+        <p class="muted">In Google Photos, open an album, tap Share, then Create link. Paste the link here. The server checks the album for new photos every night.</p>
+        <form id="album-form" class="stack">
+          <label>Album link
+            <input name="url" type="url" inputmode="url" placeholder="https://photos.app.goo.gl/…" required>
+          </label>
+          <div class="row">
+            <button type="submit">Save album link</button>
+            <button type="button" class="quiet" id="album-refresh">Check now</button>
+          </div>
+        </form>
+        <p id="album-status" class="status"></p>
+        <button type="button" class="link danger" id="album-remove" hidden>Remove album and its photos</button>
+
+        <h2>Pick from your Google account</h2>
+        <div id="google-box"></div>
+      </section>
+
+      <section id="tab-calendars" role="tabpanel" aria-labelledby="tab-btn-calendars" class="panel" hidden>
+        <p class="muted">Show another calendar by its iCal link. In Google Calendar on a computer, open Settings, pick the calendar, and copy “Secret address in iCal format”.</p>
+        <ul id="feed-list" class="feeds"></ul>
+        <form id="feed-form" class="stack">
+          <label>Name
+            <input name="name" required maxlength="80" placeholder="Work">
+          </label>
+          <label>iCal link
+            <input name="url" type="url" inputmode="url" required placeholder="https://calendar.google.com/calendar/ical/…">
+          </label>
+          <fieldset class="swatches" id="feed-colors">
+            <legend>Color</legend>
+          </fieldset>
+          <div class="row">
+            <button type="submit">Add calendar</button>
+            <button type="button" class="quiet" id="feeds-refresh">Refresh all now</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

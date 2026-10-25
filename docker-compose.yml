@@ -1,0 +1,19 @@
+services:
+  kiwi:
+    # Replace with your GitHub username after the Server workflow has published the image,
+    # or comment out `image` and use `build: ./server` to build locally.
+    image: ghcr.io/your-github-user/kiwi-calendar:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - kiwi-data:/data
+    environment:
+      TZ: America/Chicago
+      SYNC_TIME: "03:00"
+      # KIWI_TOKEN: choose-your-own
+      # GOOGLE_CLIENT_ID: ""
+      # GOOGLE_CLIENT_SECRET: ""
+    restart: unless-stopped
+
+volumes:
+  kiwi-data:
