@@ -1,0 +1,5 @@
+Android release compilation fix:
+android/app/src/main/java/dev/kiwicalendar/ui/AppRoot.kt:115
+Updated nullable WeatherReport.takeIf to weather?.takeIf to prevent compileReleaseKotlin error.
+The full Android build has NOT been tested in this environment.
+Re-run GitHub Actions Android release build to verify.

@@ -112,7 +112,7 @@ private fun MainScreens(container: AppContainer, settings: AppSettings, device: 
         },
         title = title,
         subtitle = subtitle,
-        weather = weather.takeIf { report -> settings.weatherPlace?.let { report.matches(it, settings.units) } == true },
+        weather = weather?.takeIf { report -> settings.weatherPlace?.let { report.matches(it, settings.units) } == true },
         use24h = settings.use24h,
         onNavigate = { destination ->
             when (destination) {
