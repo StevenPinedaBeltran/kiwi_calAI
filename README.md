@@ -1,14 +1,12 @@
-> **Dashboard redesign:** The Docker-hosted web control center now uses a compact dark dashboard with live event, photo, and calendar statistics. For the updated Windows/Docker Desktop install on **port 8088**, read [START-WINDOWS.md](START-WINDOWS.md). The Android-native UI has not been redesigned in this update.
-
 <img src="branding/icon.svg" width="96" alt="">
 
 # Kiwi Calendar
 
-A self-hosted family wall calendar for the inexpensive Android 14 calendar displays sold as kitchen or hallway screens.
+A self-hosted family wall calendar. I built it for one of those cheap Android 14 calendar screens sold for kitchens and hallways, because the app it came with was locked down. It runs on any Android 8.0 or newer tablet.
 
-The tablet app is a black-and-white dashboard: a month calendar with the day's schedule beside it, a detailed local forecast, and a sidebar for photos and settings. When nobody has touched it for a while it becomes a full-screen photo frame with a large clock, the weather, the next few events, and live scores for the teams you follow. A small server running in Docker refreshes photos and subscribed calendars every night, and hosts a web page your phone opens from a QR code on the calendar so anyone in the house can add events.
+On the wall it's a black-and-white dashboard: a month calendar with the day's schedule beside it, a detailed local forecast, and a sidebar for photos and settings. When nobody has touched it for a while, it turns into a full-screen photo frame with a clock, the weather, the next few events, and scores for the teams you follow.
 
-The tablet keeps its own copy of everything, so it keeps working if the server or the internet goes down.
+Behind it is a small server in Docker. It refreshes photos and subscribed calendars every night and hosts a web page that anyone in the house can open by scanning a QR code on the calendar to add events. The tablet keeps its own copy of everything, so it keeps working when the server or the internet is down.
 
 ```
  Phone or computer ── scans QR code ──► web page ─┐
@@ -19,152 +17,40 @@ The tablet keeps its own copy of everything, so it keeps working if the server o
  Open-Meteo ────┘── weather on request ─► └──────────┘ ◄── weather every 15 min ─ └──────────┘
 ```
 
-## What's in the repository
+## What's here
 
 | Path | Contents |
 | --- | --- |
-| `android/` | The tablet app: Kotlin, Jetpack Compose, no Google Play services required |
-| `server/` | The server: Python, FastAPI, SQLite, plus the phone web page in `server/app/static` |
-| `.github/workflows/` | Builds the APK and publishes the server image on every push |
+| `android/` | The tablet app: Kotlin and Jetpack Compose, no Google Play services needed |
+| `server/` | The server: Python, FastAPI and SQLite, plus the web page in `server/app/static` |
+| `.github/workflows/` | Builds the APK and the server image with GitHub Actions |
+| `scripts/` | Helper for creating a signing key on Windows |
 | `docker-compose.yml` | Runs the server |
 
-## Getting started
+## Run your own
 
-### 1. Put the code on GitHub
+You'll need a tablet, an always-on computer at home that runs Docker (a Raspberry Pi 4 is plenty), and a GitHub account to build the APK. Android Studio works too if you'd rather build locally; see [Building locally](#building-locally).
 
-Create a repository and push this code to it. Two workflows start on their own:
+### 1. Fork the repo and turn on Actions
 
-- **Android** builds the APK. It appears under the workflow run's **Artifacts**, and on the **Releases** page when you push a tag such as `v1.0.0`.
-- **Server** runs the tests and publishes a Docker image to `ghcr.io/<your-user>/<your-repo>`.
+Click **Fork** at the top of this page. GitHub turns off workflows in new forks, so open your fork's **Actions** tab and enable them.
 
-GitHub makes new container images private. Either open the package under your profile's **Packages** tab and set its visibility to public, or run `docker login ghcr.io` on the machine that will host the server.
+Two workflows are included:
 
-Before installing builds you intend to keep, set up a signing key (see [Signing](#signing)). Otherwise every build is signed with a different throwaway key, and each update means uninstalling the app and running setup again.
+- **Android** builds the APK on every push to `main`. The APK shows up under the run's **Artifacts**, and on your **Releases** page when you push a tag like `v1.0.0`.
+- **Server** runs the tests and publishes a Docker image to `ghcr.io/<you>/<repo>`. You don't need this image unless you want to pull it instead of building locally.
 
-### 2. Start the server
+### 2. Add a signing key
 
-On any always-on machine at home (a Raspberry Pi 4 or newer is plenty), edit `docker-compose.yml`:
+Android only installs an update over an existing app if both builds are signed with the same key. Without one, every build gets a throwaway key, and each update means uninstalling the app and setting it up again. Make your own key once, before you install anything you want to keep.
 
-- Set `image` to your published image, or replace it with `build: ./server`.
-- Set `TZ` to your time zone, for example `America/New_York`.
+**Windows:** from the repo folder, run
 
-Then:
-
-```sh
-docker compose up -d
-docker compose logs kiwi | grep "Access token"
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\make-signing-key.ps1
 ```
 
-The server listens on port 8080 inside the container; the updated Docker Compose file exposes it on Windows host port 8088. Note the machine's local IP address and give it a fixed address in your router's DHCP settings, since the tablet stores it.
-
-### 3. Install the app on the calendar
-
-Download the APK onto the tablet and open it, allowing installs from your browser when Android asks. With a USB cable and developer mode enabled, `adb install kiwi-calendar-*.apk` also works.
-
-Open Kiwi Calendar and follow the setup screens. You'll enter the server address (for example `192.168.1.20:8080`) and the access token, search for your town for the weather, choose teams, add photos from your phone, and decide when photo mode starts.
-
-## Using the calendar
-
-The sidebar on the left switches between the calendar and the weather, starts photo mode, shows the code for adding events from a phone, and opens settings. Tap any day to see its schedule in the panel on the right; the arrows above that panel step through days, and its calendar button jumps back to today. The greeting at the top uses the name you set under **Settings > Display**.
-
-The Android app is strictly black and white; the Docker web dashboard uses dark gray with orange and green accents. Each event's color shows as a shade of gray, and events created on the tablet pick a shade by type: Important, Family, Work, or Personal.
-
-## Adding events
-
-- **On the calendar:** tap **+** above the month, or tap an event you created to edit or delete it.
-- **From a phone:** tap **From phone** on the calendar and scan the code. The page remembers the phone afterwards.
-- **From a computer:** open `http://<server>:8080` and paste the access token.
-
-Events added elsewhere appear on the calendar within about two minutes. Events created on the tablet while it's offline are queued and sent when the server is reachable again.
-
-To show calendars you already keep elsewhere, add their iCal links on the web page under **Calendars**. For Google Calendar, open Settings on a computer, select the calendar, and copy **Secret address in iCal format**. These events are read-only on the wall; edit them at the source.
-
-## Photos
-
-Google stopped letting third-party apps read albums from a Google Photos library in 2025, so Kiwi Calendar offers the two methods that still work. You can use both at once.
-
-### Shared album link
-
-The simplest option. In Google Photos, open an album, tap **Share**, create a link, and paste it on the web page's **Photos** tab. The server downloads the photos, resizes them for the screen, and checks the album for changes every night, so adding photos to the album is all you need to do later.
-
-This reads the album's public share page, which is not an official API. If Google changes that page, this method can stop working until the parser is updated. Anyone with the link can view the album.
-
-### Picking photos from your Google account
-
-This uses Google's official Photos Picker. You choose photos in the Google Photos app (you can search by album name while choosing), and the server downloads them once. It needs a free Google Cloud OAuth client, which takes about ten minutes to set up:
-
-1. In the [Google Cloud console](https://console.cloud.google.com/), create a project.
-2. Under **APIs & Services > Library**, enable the **Photos Picker API**.
-3. Configure the OAuth consent screen (Google Auth Platform). Choose **External**, fill in the app name and your email, and add your own Google account under **Test users**.
-4. Under **Clients** (or **Credentials**), create an OAuth client with the application type **TVs and Limited Input devices**. This type signs in with a short code instead of a redirect, so it works for a server on a home network with no public address.
-5. Put the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `docker-compose.yml`, then run `docker compose up -d`.
-6. On the web page's **Photos** tab, tap **Connect Google account**, enter the code shown, then tap **Pick photos**.
-
-While the consent screen is in testing mode, Google ends the sign-in after seven days. Photos already downloaded stay on the calendar; connect again when you want to pick more.
-
-## Weather
-
-Search for your town during setup, or later under **Settings > Weather**, and choose Fahrenheit or Celsius.
-
-- **On the calendar:** the header shows current conditions with today's high and low. Tap it for the full forecast.
-- **On the Weather screen:** current conditions and feels-like temperature, wind speed and direction on a compass, humidity and dew point, UV index, air quality (US AQI), pressure, visibility, a 24-hour temperature and rain chart, a 7-day forecast with each day's range drawn against the week, and sunrise, sunset, and daylight.
-- **In photo mode:** a card with the current conditions and the next six hours.
-
-Forecasts come from [Open-Meteo](https://open-meteo.com/), which needs no API key and is free for non-commercial use. The server caches each forecast for ten minutes, and the tablet refreshes every fifteen and keeps the last forecast for when it's offline.
-
-## Sports scores
-
-Choose teams during setup or later in Settings. Supported leagues: NFL, college football, NBA, WNBA, men's and women's college basketball, MLB, NHL, MLS, Premier League, La Liga, and the Champions League.
-
-For each followed team, the dashboard and tablet show its latest score **only if the game started within the last seven days** (the previous 168 hours). Active games appear first, followed by the most recent final results. Upcoming games and older scores are hidden; a team that hasn't played in a week has no score card. Even offline, cached scores disappear when they pass the seven-day limit. Scores refresh every two minutes while the Android app is active. Data comes from ESPN's unofficial site API, which can change without notice.
-
-## Photo mode and quiet hours
-
-Photo mode starts after the calendar sits untouched for the time you choose (five minutes by default), or when you tap the photos button in the sidebar. Photos fill the whole screen, cropping the edges where a photo's shape doesn't match the display, with a slow zoom while each one shows. Tap anywhere to return to the calendar.
-
-Sometimes I just want it to look like a picture frame. Long-press anywhere in photo mode and the clock and widgets fade out; long-press again to bring them back. It remembers how you left it. If you only want to hide some of it, there are switches under **Settings > Display > While photos play**.
-
-With quiet hours turned on, the screen dims overnight and shows only a clock. Touching it brings the calendar back for a minute.
-
-## Setting up the tablet
-
-- In Settings on the calendar, turn on **Open automatically** and choose Kiwi Calendar when Android asks for a home app. The calendar then reopens on its own after a restart or power cut.
-- The app keeps the screen on while it's open, so the system screen timeout doesn't matter.
-- Some manufacturers ship aggressive battery managers that stop background work. If the daily sync seems not to run, set Kiwi Calendar's battery usage to **Unrestricted** in the system app settings.
-
-## Changing the logo or colors
-
-The logo lives in `branding/logo.svg`. It's used in four places:
-
-| File | Where it shows |
-| --- | --- |
-| `android/app/src/main/res/drawable/ic_launcher_foreground.xml` | Launcher icon, also used for Android's themed icons |
-| `android/app/src/main/res/drawable/ic_logo.xml` | Sidebar, setup, and Settings screens |
-| `server/app/static/logo.svg`, `icon.svg`, `apple-touch-icon.png` | Phone web page, browser tab, and home-screen shortcut |
-| `branding/icon.svg` | This README |
-
-The launcher icon background is the `ink` color in `android/app/src/main/res/values/colors.xml`. The app's black-and-white palette and event shades are in `android/app/src/main/java/dev/kiwicalendar/ui/Theme.kt`, and its frosted-panel styles are in `ui/Glass.kt`. The phone web page keeps its own green palette, set at the top of `server/app/static/app.css`.
-
-## Server configuration
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `TZ` | `UTC` | Time zone used for calendar feeds and the daily refresh |
-| `KIWI_TOKEN` | generated | Access token for the app and web page. If unset, one is generated on first start and kept in the data volume |
-| `SYNC_TIME` | `03:00` | Local time of the daily refresh of feeds and the shared album. A refresh also runs at startup |
-| `MAX_PHOTOS` | `500` | Most photos taken from a shared album |
-| `PHOTO_MAX_EDGE` | `1920` | Photos are resized so their longest side is at most this many pixels |
-| `GOOGLE_CLIENT_ID` | | OAuth client for the Photos Picker |
-| `GOOGLE_CLIENT_SECRET` | | OAuth client secret for the Photos Picker |
-| `KIWI_DATA` | `/data` | Where the database, token, and photos are stored |
-
-The web page has buttons to refresh feeds and the album immediately, so you rarely need to wait for the nightly run.
-
-## Signing
-
-Android only installs an update over an existing app if both are signed with the same key. Create one key, once, and store it as repository secrets:
-
-**Windows:** run `powershell -ExecutionPolicy Bypass -File scripts\make-signing-key.ps1`. It uses Java's `keytool` if installed, otherwise Docker Desktop, saves the key in a `kiwi-calendar-signing` folder in your user folder (outside the repo), copies the base64 value to your clipboard, and prints the four secrets to add.
+It uses Java's `keytool` if you have it and Docker Desktop if you don't. The key goes in a `kiwi-calendar-signing` folder in your user folder, outside the repo. The script copies the encoded key to your clipboard and prints the four secrets to add.
 
 **Mac or Linux:**
 
@@ -176,18 +62,141 @@ base64 -w0 kiwi-calendar.jks          # Linux
 base64 -i kiwi-calendar.jks           # macOS
 ```
 
-Under **Settings > Secrets and variables > Actions**, add:
+In your fork, go to **Settings > Secrets and variables > Actions** and add:
 
 | Secret | Value |
 | --- | --- |
-| `KEYSTORE_BASE64` | The base64 output |
+| `KEYSTORE_BASE64` | The base64 text |
 | `KEYSTORE_PASSWORD` | The keystore password |
-| `KEY_ALIAS` | `kiwi` |
-| `KEY_PASSWORD` | The key password (the same as the keystore password unless you chose otherwise) |
+| `KEY_ALIAS` | The alias (`kiwi` above, `kiwicalendar` from the Windows script) |
+| `KEY_PASSWORD` | The key password, usually the same as the keystore password |
 
-Keep a backup of `kiwi-calendar.jks` somewhere safe and never commit it. If it's lost, the only way to install new builds is to uninstall the app first.
+Back up the `.jks` file and its password, and never commit them. If you lose the key, the only way to install new builds is to uninstall the app first.
 
-## Building locally
+### 3. Build the APK
+
+Tag a release and push it:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+When the Android workflow finishes, `kiwi-calendar-1.0.0.apk` is on your fork's **Releases** page.
+
+### 4. Start the server
+
+On the machine that will run it, clone your fork and set `TZ` in `docker-compose.yml` to your time zone (for example `America/New_York`). Then:
+
+```sh
+docker compose up -d --build
+docker compose logs kiwi | grep "Access token"
+```
+
+The web page is now at `http://<that machine's IP>:8088`. Give the machine a fixed address in your router's settings, since the tablet remembers it. To use the image the Server workflow published instead of building, replace the `build:` lines in `docker-compose.yml` with `image: ghcr.io/<you>/<repo>:latest`. GitHub makes new images private, so either make the package public under your profile's **Packages** tab or run `docker login ghcr.io` first.
+
+### 5. Install it on the tablet
+
+Open your Releases page in the tablet's browser, download the APK, and open it, allowing installs from the browser when Android asks. With USB debugging on, `adb install kiwi-calendar-1.0.0.apk` works too.
+
+The setup screens ask for the server address (like `192.168.1.20:8088`) and the access token, your town for the weather, the teams you follow, and when photo mode should start. You add photos from your phone.
+
+For later updates, push a new tag (`v1.0.1` and so on) and install the new APK over the old one. Your settings stay.
+
+## Using it
+
+### The calendar
+
+The sidebar switches between the calendar and the weather, starts photo mode, shows the QR code for adding events from a phone, and opens settings. Tap a day to see its schedule in the panel on the right. The arrows above the panel step through days, and the calendar button jumps back to today. The greeting at the top uses the name set under **Settings > Display**.
+
+The tablet app is strictly black and white, and each event's color shows as a shade of gray. Events created on the tablet pick a shade by type: Important, Family, Work or Personal. The web page uses dark gray with orange and green accents.
+
+### Adding events
+
+- **On the calendar:** tap **+** above the month, or tap an event you made to edit or delete it.
+- **From a phone:** tap **From phone** on the calendar and scan the code. The page remembers the phone afterwards.
+- **From a computer:** open `http://<server>:8088` and paste the access token.
+
+Events added elsewhere show up within about two minutes. Events made on the tablet while it's offline are queued and sent once the server is reachable.
+
+To show calendars you already keep somewhere else, add their iCal links on the web page under **Calendars**. For Google Calendar, open its settings on a computer, select the calendar, and copy **Secret address in iCal format**. These events are read-only on the wall; edit them where they came from.
+
+### Photos
+
+Google stopped letting third-party apps read Google Photos albums in 2025, so there are two ways to get photos in. You can use both.
+
+**Shared album link.** The easy one. In Google Photos, open an album, tap **Share**, create a link, and paste it on the web page's **Photos** tab. The server downloads the photos, resizes them for the screen, and checks the album every night, so adding photos to the album is all you do later. This reads the album's public share page, which isn't an official API, so it can break if Google changes that page. Anyone with the link can see the album.
+
+**Picking photos from your Google account.** This uses Google's official Photos Picker: you choose photos in the Google Photos app (you can search by album while choosing), and the server downloads them once. It needs a free Google Cloud OAuth client, which takes about ten minutes:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project.
+2. Under **APIs & Services > Library**, enable the **Photos Picker API**.
+3. Set up the OAuth consent screen (Google Auth Platform). Choose **External**, fill in the app name and your email, and add your Google account under **Test users**.
+4. Under **Clients** (or **Credentials**), create an OAuth client of type **TVs and Limited Input devices**. It signs in with a short code instead of a redirect, so it works for a server with no public address.
+5. Put the client ID and secret in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `docker-compose.yml` and run `docker compose up -d`.
+6. On the web page's **Photos** tab, tap **Connect Google account**, enter the code, then tap **Pick photos**.
+
+While the consent screen is in testing mode, Google ends the sign-in after seven days. Downloaded photos stay; connect again when you want to pick more.
+
+### Weather
+
+Pick your town during setup or under **Settings > Weather**, and choose Fahrenheit or Celsius.
+
+- **Calendar header:** current conditions with today's high and low. Tap it for the full forecast.
+- **Weather screen:** feels-like temperature, wind on a compass, humidity and dew point, UV index, air quality (US AQI), pressure, visibility, a 24-hour temperature and rain chart, a 7-day forecast, and sunrise, sunset and daylight.
+- **Photo mode:** a card with current conditions and the next six hours.
+
+Forecasts come from [Open-Meteo](https://open-meteo.com/), which needs no API key and is free for non-commercial use. The server caches each forecast for ten minutes. The tablet refreshes every fifteen and keeps the last one for when it's offline.
+
+### Sports scores
+
+Pick teams during setup or in Settings. Supported leagues: NFL, college football, NBA, WNBA, men's and women's college basketball, MLB, NHL, MLS, Premier League, La Liga and the Champions League.
+
+A team's score only shows if its game started in the last seven days. Live games come first, then the latest finals. Upcoming games and older results are hidden, even from the offline cache. Scores refresh every two minutes while the app is open. They come from ESPN's unofficial site API, which can change without notice.
+
+### Photo mode and quiet hours
+
+Photo mode starts after the calendar sits untouched for the time you choose (five minutes by default), or when you tap the photos button in the sidebar. Photos fill the screen with a slow zoom. Tap anywhere to go back to the calendar.
+
+Sometimes I just want it to look like a picture frame. Long-press anywhere in photo mode and the clock and widgets fade out; long-press again to bring them back. It remembers how you left it. To hide only some of it, there are switches under **Settings > Display > While photos play**.
+
+With quiet hours on, the screen dims overnight and shows only a clock. Touching it brings the calendar back for a minute.
+
+### Setting up the tablet
+
+- Under Settings, turn on **Open automatically** and choose Kiwi Calendar when Android asks for a home app. The calendar then comes back on its own after a restart or power cut.
+- The app keeps the screen on while it's open, so the system screen timeout doesn't matter.
+- Some tablets ship aggressive battery managers. If the daily sync doesn't seem to run, set Kiwi Calendar's battery usage to **Unrestricted** in the system app settings.
+
+## Make it yours
+
+I built this for my own wall, but fork it and change whatever you need: different hardware, other leagues, a new look, or ripping out the parts you don't use. No need to ask first. A few places to start:
+
+- **App ID:** change `applicationId` in `android/app/build.gradle.kts` if you want your version installed next to the original. The Kotlin `namespace` can stay.
+- **Logo:** the source is `branding/logo.svg`. It's drawn into `android/app/src/main/res/drawable/ic_launcher_foreground.xml` (launcher and themed icon), `ic_logo.xml` in the same folder (sidebar, setup and Settings), and `server/app/static/logo.svg`, `icon.svg` and `apple-touch-icon.png` (web page, browser tab and home-screen shortcut).
+- **Colors:** the app's palette and event shades are in `android/app/src/main/java/dev/kiwicalendar/ui/Theme.kt`, the frosted panels in `ui/Glass.kt`, and the launcher background is `ink` in `android/app/src/main/res/values/colors.xml`. The web page's colors are at the top of `server/app/static/app.css`.
+- **Leagues:** the list is `LEAGUES` in `server/app/sports.py`. Each entry points at an ESPN path.
+
+## Reference
+
+### Server settings
+
+Set these under `environment` in `docker-compose.yml`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `TZ` | `UTC` | Time zone for calendar feeds and the daily refresh |
+| `KIWI_TOKEN` | generated | Access token for the app and web page. If unset, one is generated on first start and kept in the data volume |
+| `SYNC_TIME` | `03:00` | Local time of the daily refresh. A refresh also runs at startup |
+| `MAX_PHOTOS` | `500` | Most photos taken from a shared album |
+| `PHOTO_MAX_EDGE` | `1920` | Longest side, in pixels, that photos are resized to |
+| `GOOGLE_CLIENT_ID` | | OAuth client for the Photos Picker |
+| `GOOGLE_CLIENT_SECRET` | | OAuth client secret for the Photos Picker |
+| `KIWI_DATA` | `/data` | Where the database, token and photos are stored |
+
+The web page has buttons to refresh feeds and the album right away, so you rarely need to wait for the nightly run.
+
+### Building locally
 
 The app needs JDK 17 and the Android SDK. Open `android/` in Android Studio, or:
 
@@ -196,9 +205,7 @@ cd android
 ./gradlew assembleDebug
 ```
 
-To change the package name, edit `applicationId` in `android/app/build.gradle.kts`. The Kotlin package (`namespace`) can stay as it is.
-
-For the server:
+The server:
 
 ```sh
 cd server
@@ -208,7 +215,7 @@ python -m pytest
 KIWI_DATA=./data TZ=America/Chicago uvicorn app.main:create_app --factory --reload --port 8080
 ```
 
-## Server API
+### Server API
 
 Every endpoint except `/api/health` needs an `Authorization: Bearer <token>` header.
 
@@ -226,36 +233,25 @@ Every endpoint except `/api/health` needs an `Authorization: Bearer <token>` hea
 | `GET /api/google`, `POST /api/google/connect`, `POST /api/google/pick` | Photos Picker |
 | `GET /api/sports/leagues`, `GET /api/sports/teams?league=nfl` | Leagues and teams |
 | `GET /api/scores?teams=nfl:3,nba:4` | Current scores for the given teams |
-| `GET /api/weather?lat=42.07&lon=-87.94&units=imperial` | Current conditions, 24 hours, 7 days, and air quality |
-| `GET /api/weather/search?q=Chicago` | Places matching a name, for choosing a location |
+| `GET /api/weather?lat=42.07&lon=-87.94&units=imperial` | Current conditions, 24 hours, 7 days and air quality |
+| `GET /api/weather/search?q=Chicago` | Places matching a name |
 
-Timed events use ISO 8601 with an offset (`2026-10-26T18:30:00-05:00`). All-day events use dates, with an exclusive end (`"start": "2026-10-30", "end": "2026-11-02"` covers three days).
+Timed events use ISO 8601 with an offset (`2026-10-26T18:30:00-05:00`). All-day events use dates with an exclusive end (`"start": "2026-10-30", "end": "2026-11-02"` covers three days).
+
+## Troubleshooting
+
+- **Android won't install an update** (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`): the installed app was signed with a different key, usually a build made before the signing secrets were added. Uninstall it (`adb uninstall dev.kiwicalendar`) and install again. You'll go through setup once more.
+- **Photo mode is empty:** try **Settings > Photos > Retry photo downloads**, and check that quiet hours aren't on, since quiet mode only shows a clock.
+- **The tablet can't reach the server:** use the server machine's local IP, not `localhost`, include port `8088`, and make sure its firewall allows that port.
+- **Updating the server doesn't update the app.** The APK comes from the Android workflow; install the new one on the tablet.
+- **Lost data after moving the server folder:** Docker names the data volume after the folder. Run `docker compose -p <old folder name> up -d --build` to reuse the old one. Never run `docker compose down -v` unless you mean to delete everything.
 
 ## Security
 
-The access token works like a shared password, and the QR code contains it, so anyone who scans or photographs the code can add and delete events. Keep the server on your home network. If you want to add events from outside the house, use a VPN such as Tailscale or WireGuard, or put the server behind a reverse proxy with HTTPS, rather than forwarding port 8080. Change the token by setting `KIWI_TOKEN` (or deleting the `token` file in the data volume) and restarting; then enter the new one on the tablet under Settings.
+The access token works like a shared password, and the QR code contains it, so anyone who scans or photographs the code can add and delete events. Keep the server on your home network. To add events from outside the house, use a VPN like Tailscale or WireGuard, or a reverse proxy with HTTPS, rather than forwarding the port. To change the token, set `KIWI_TOKEN` (or delete the `token` file in the data volume), restart, and enter the new token on the tablet under Settings.
 
 The app allows plain HTTP because home servers rarely have certificates.
 
-## Make it yours
-
-I built this for my own wall, but you're welcome to fork it and change it for whatever you need: different hardware, other leagues, a new look, or ripping out the parts you don't use. No need to ask first.
-
-1. Click **Fork** on GitHub.
-2. Add your own signing secrets (see [Signing](#signing)). Your fork gets its own key, so its builds won't install over mine.
-3. Push, and the Actions workflows build your APK and server image under your account.
-4. Point `docker-compose.yml` at your image, or keep building it locally.
-
-If you want your own app alongside this one on the same tablet, change `applicationId` in `android/app/build.gradle.kts` too.
-
 ## License
 
-MIT, see [LICENSE](LICENSE). Two fonts are bundled under the SIL Open Font License 1.1: Outfit in the tablet app (see `android/app/src/main/assets/outfit-OFL.txt`) and Atkinson Hyperlegible on the web page (see `server/app/static/fonts/OFL.txt`). Weather data is from Open-Meteo.
-
-## Unified interface / photo repair update
-
-The `server/app/static/` dashboard uses the same family-oriented navigation as the Android app: an interactive family calendar, agenda, sync health, and locally cached photo thumbnails. Both support accessible dark and light palettes with Outfit text. On the web, use the **Light mode / Dark mode** button in the upper-right. On Android, select **Settings → Display → Appearance → System / Dark / Light**.
-
-If the Android sleep/slideshow view is empty, check **Settings → Photos → Retry photo downloads** and whether **Quiet hours** is enabled (quiet mode intentionally shows only a clock). The native app now retries missing photo files even when the server revision has not changed, downloads each photo to a validated temporary file before replacing its cache, and refreshes on entering sleep mode when no usable photos exist. The server now bumps its data revision when an album refresh adds or removes pictures. Dashboard photo previews are fetched using the authenticated photo API, not unprotected image URLs.
-
-A Docker update does not automatically update the Android APK. Build Android with the included GitHub Actions workflow (or Android Studio), then install the APK on the tablet. Consistent signing keys are required to upgrade without uninstalling. See `START-WINDOWS.md`.
+MIT, see [LICENSE](LICENSE). Two fonts are bundled under the SIL Open Font License 1.1: Outfit in the app (`android/app/src/main/assets/outfit-OFL.txt`) and Atkinson Hyperlegible on the web page (`server/app/static/fonts/OFL.txt`). Weather data is from Open-Meteo.
