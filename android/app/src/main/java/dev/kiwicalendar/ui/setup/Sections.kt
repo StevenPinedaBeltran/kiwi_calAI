@@ -1,7 +1,6 @@
 package dev.kiwicalendar.ui.setup
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +17,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,7 +30,6 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,15 +51,20 @@ import dev.kiwicalendar.data.AppContainer
 import dev.kiwicalendar.data.League
 import dev.kiwicalendar.data.Team
 import dev.kiwicalendar.data.TeamRef
+import dev.kiwicalendar.data.WeatherPlace
 import dev.kiwicalendar.ui.DeviceControls
+import dev.kiwicalendar.ui.GlassField
+import dev.kiwicalendar.ui.Mono
+import dev.kiwicalendar.ui.MonoSwitch
+import dev.kiwicalendar.ui.PrimaryButton
 import dev.kiwicalendar.ui.components.ChoiceChips
 import dev.kiwicalendar.ui.components.QrCode
 import dev.kiwicalendar.ui.components.SettingRow
 import dev.kiwicalendar.ui.components.TimePickerDialog
 import dev.kiwicalendar.ui.components.webLink
 import dev.kiwicalendar.ui.formatTime
+import dev.kiwicalendar.ui.glass
 import dev.kiwicalendar.ui.minutesToTime
-import dev.kiwicalendar.ui.parseHexColor
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -246,26 +247,32 @@ fun SportsSection(container: AppContainer) {
 
 @Composable
 private fun TeamTile(team: Team, following: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (following) colors.primaryContainer else colors.surfaceVariant)
+            .glass(RoundedCornerShape(14.dp), fill = if (following) Color.White else Mono.Card)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val ink = if (following) Color.Black else Color.White
         Box(
             Modifier
-                .size(16.dp)
-                .clip(CircleShape)
-                .background(parseHexColor(team.color) ?: Color.Gray)
-                .border(1.dp, colors.outlineVariant, CircleShape)
-        )
+                .size(width = 44.dp, height = 26.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (following) Color.Black.copy(alpha = 0.1f) else Mono.CardStrong),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(team.abbr.ifEmpty { team.name.take(3) }, style = MaterialTheme.typography.labelMedium, color = ink)
+        }
         Spacer(Modifier.width(10.dp))
-        Text(team.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
-        if (following) Icon(Icons.Default.Check, contentDescription = "Following", tint = colors.primary)
+        Text(
+            team.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = ink,
+            modifier = Modifier.weight(1f),
+            maxLines = 1
+        )
     }
 }
 
@@ -319,6 +326,13 @@ fun DisplaySection(container: AppContainer) {
     var editing by remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Name for the greeting", style = MaterialTheme.typography.titleSmall)
+        GlassField(
+            value = settings.householdName,
+            onValueChange = { name -> store.update { it.copy(householdName = name.take(30)) } },
+            placeholder = "Alex, or The Parkers",
+            modifier = Modifier.fillMaxWidth()
+        )
         Text("Start photos after the calendar sits untouched for", style = MaterialTheme.typography.titleSmall)
         ChoiceChips(
             options = listOf(0 to "Never", 2 to "2 minutes", 5 to "5 minutes", 10 to "10 minutes", 30 to "30 minutes"),
@@ -332,7 +346,7 @@ fun DisplaySection(container: AppContainer) {
             onSelect = { seconds -> store.update { it.copy(photoSeconds = seconds) } }
         )
         SettingRow("Quiet hours", "Dim the screen and show only the clock overnight") {
-            Switch(checked = settings.quietEnabled, onCheckedChange = { on ->
+            MonoSwitch(checked = settings.quietEnabled, onCheckedChange = { on ->
                 store.update { it.copy(quietEnabled = on) }
             })
         }
@@ -347,15 +361,12 @@ fun DisplaySection(container: AppContainer) {
             }
         }
         SettingRow("24-hour clock") {
-            Switch(checked = settings.use24h, onCheckedChange = { on -> store.update { it.copy(use24h = on) } })
+            MonoSwitch(checked = settings.use24h, onCheckedChange = { on -> store.update { it.copy(use24h = on) } })
         }
         SettingRow("Start weeks on Monday") {
-            Switch(checked = settings.weekStartsMonday, onCheckedChange = { on ->
+            MonoSwitch(checked = settings.weekStartsMonday, onCheckedChange = { on ->
                 store.update { it.copy(weekStartsMonday = on) }
             })
-        }
-        SettingRow("Dark theme") {
-            Switch(checked = settings.darkTheme, onCheckedChange = { on -> store.update { it.copy(darkTheme = on) } })
         }
     }
 
@@ -377,11 +388,95 @@ fun HomeSection(device: DeviceControls) {
         subtitle = "Makes Kiwi Calendar the home screen, so it comes back on its own after a restart or power cut. " +
             "When Android asks, choose Kiwi Calendar."
     ) {
-        Switch(
+        MonoSwitch(
             checked = enabled,
             onCheckedChange = {
                 device.setHomeApp(it)
                 enabled = it
+            }
+        )
+    }
+}
+
+@Composable
+fun WeatherSection(container: AppContainer) {
+    val settings by container.settings.flow.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<WeatherPlace>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun search() {
+        scope.launch {
+            searching = true
+            message = null
+            try {
+                results = container.api.searchPlaces(query.trim())
+                if (results.isEmpty()) message = "No places found. Try adding the state or country."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message = "Couldn't search: ${e.message}"
+            }
+            searching = false
+        }
+    }
+
+    fun choose(place: WeatherPlace) {
+        container.settings.update { it.copy(weatherPlace = place) }
+        results = emptyList()
+        query = ""
+        container.repository.launchWeatherRefresh()
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val place = settings.weatherPlace
+        Text(
+            if (place == null) {
+                "Search for your town to show the forecast."
+            } else {
+                "Showing weather for " + listOf(
+                    place.name,
+                    place.region
+                ).filter(String::isNotBlank).joinToString(", ") +
+                    "."
+            },
+            style = MaterialTheme.typography.bodyLarge,
+            color = Mono.Muted
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlassField(query, { query = it }, "Town or city", modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            PrimaryButton(
+                if (searching) "Searching…" else "Search",
+                onClick = { search() },
+                enabled =
+                !searching && query.trim().length >= 2
+            )
+        }
+        message?.let { Text(it, color = Mono.Muted) }
+        results.forEach { result ->
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .glass(RoundedCornerShape(14.dp))
+                    .clickable { choose(result) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(result.name, style = MaterialTheme.typography.titleMedium)
+                if (result.region.isNotBlank()) {
+                    Text(result.region, style = MaterialTheme.typography.bodyMedium, color = Mono.Muted)
+                }
+            }
+        }
+        Text("Units", style = MaterialTheme.typography.titleSmall)
+        ChoiceChips(
+            options = listOf("imperial" to "°F, mph", "metric" to "°C, km/h"),
+            selected = settings.units,
+            onSelect = { units ->
+                container.settings.update { it.copy(units = units) }
+                container.repository.launchWeatherRefresh()
             }
         )
     }

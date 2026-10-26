@@ -19,6 +19,9 @@ class LocalStore(private val root: File) {
     fun loadPending(): List<PendingOp> = read(PENDING, ListSerializer(PendingOp.serializer())) ?: emptyList()
     fun savePending(value: List<PendingOp>) = write(PENDING, ListSerializer(PendingOp.serializer()), value)
 
+    fun loadWeather(): WeatherReport? = read(WEATHER, WeatherReport.serializer())
+    fun saveWeather(value: WeatherReport) = write(WEATHER, WeatherReport.serializer(), value)
+
     @Synchronized
     private fun <T> read(name: String, serializer: KSerializer<T>): T? {
         val file = File(root, name)
@@ -37,5 +40,6 @@ class LocalStore(private val root: File) {
         const val SNAPSHOT = "snapshot.json"
         const val SCORES = "scores.json"
         const val PENDING = "pending.json"
+        const val WEATHER = "weather.json"
     }
 }

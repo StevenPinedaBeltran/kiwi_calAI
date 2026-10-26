@@ -2,6 +2,7 @@ package dev.kiwicalendar.data
 
 import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,6 +41,12 @@ class ServerApi(private val settings: () -> AppSettings) {
         val query = teams.joinToString(",") { "${it.league}:${it.id}" }
         return get("/api/scores?teams=$query", ListSerializer(Game.serializer()))
     }
+
+    suspend fun weather(place: WeatherPlace, units: String): WeatherReport =
+        get("/api/weather?lat=${place.latitude}&lon=${place.longitude}&units=$units", WeatherReport.serializer())
+
+    suspend fun searchPlaces(query: String): List<WeatherPlace> =
+        get("/api/weather/search?q=${URLEncoder.encode(query, "UTF-8")}", ListSerializer(WeatherPlace.serializer()))
 
     suspend fun putEvent(event: Event) {
         val body = AppJson.encodeToString(Event.serializer(), event).toRequestBody(JSON)

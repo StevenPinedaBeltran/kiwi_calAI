@@ -29,10 +29,12 @@ class Repository(
     private val pending = MutableStateFlow(store.loadPending())
     private val _scores = MutableStateFlow(store.loadScores())
     private val _status = MutableStateFlow(SyncStatus(lastSuccess = _snapshot.value.syncedAt))
+    private val _weather = MutableStateFlow(store.loadWeather())
 
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
     val scores: StateFlow<List<Game>> = _scores.asStateFlow()
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
+    val weather: StateFlow<WeatherReport?> = _weather.asStateFlow()
 
     fun launchSync() {
         scope.launch { sync() }
@@ -104,6 +106,25 @@ class Repository(
         } catch (e: Exception) {
             // Keep showing the last scores we had.
         }
+    }
+
+    suspend fun refreshWeather() {
+        val current = settings.value
+        val place = current.weatherPlace ?: return
+        if (!current.isPaired) return
+        try {
+            val report = api.weather(place, current.units).copy(fetchedAt = System.currentTimeMillis())
+            _weather.value = report
+            store.saveWeather(report)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Keep the last report; the UI shows how old it is.
+        }
+    }
+
+    fun launchWeatherRefresh() {
+        scope.launch { refreshWeather() }
     }
 
     private fun enqueue(op: PendingOp) {
