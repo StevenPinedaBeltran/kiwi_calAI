@@ -36,7 +36,7 @@ import dev.kiwicalendar.R
 import dev.kiwicalendar.data.AppContainer
 import dev.kiwicalendar.ui.DeviceControls
 
-private enum class Step { Welcome, Server, Teams, Photos, Display, Finish }
+private enum class Step { Welcome, Server, Weather, Teams, Photos, Display, Finish }
 
 @Composable
 fun OnboardingScreen(container: AppContainer, device: DeviceControls) {
@@ -79,6 +79,10 @@ fun OnboardingScreen(container: AppContainer, device: DeviceControls) {
                         "The Kiwi Calendar server runs in Docker on a computer at home. It brings in photos, scores, " +
                             "and shared calendars, and it's where your phone sends new events."
                     ) { ServerSection(container) }
+                    Step.Weather -> Page(
+                        "Where are you?",
+                        "The forecast shows on the calendar and while photos play. You can skip this and add it later."
+                    ) { WeatherSection(container) }
                     Step.Teams -> Page(
                         "Pick your teams",
                         "Scores for these teams appear while photos are showing. You can skip this and add teams later."
@@ -142,6 +146,7 @@ private fun Welcome() {
         Spacer(Modifier.height(8.dp))
         listOf(
             "Connect to the server",
+            "Add your local weather",
             "Pick the teams you follow",
             "Choose photos from Google Photos",
             "Decide when photos play"

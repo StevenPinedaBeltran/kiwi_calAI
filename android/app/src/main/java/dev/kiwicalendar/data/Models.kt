@@ -92,3 +92,80 @@ data class Game(
 /** A local change waiting to be sent to the server. */
 @Serializable
 data class PendingOp(val delete: Boolean, val event: Event)
+
+@Serializable
+data class WeatherPlace(val name: String, val region: String = "", val latitude: Double, val longitude: Double)
+
+@Serializable
+data class WeatherLabels(
+    val temp: String = "°",
+    val speed: String = "",
+    val precip: String = "",
+    val distance: String = "",
+    val pressure: String = ""
+)
+
+// Numbers are Doubles throughout so an upstream change from 42 to 42.0 can't break decoding.
+@Serializable
+data class WeatherNow(
+    val time: String = "",
+    val temp: Double? = null,
+    @SerialName("feels_like") val feelsLike: Double? = null,
+    val humidity: Double? = null,
+    @SerialName("dew_point") val dewPoint: Double? = null,
+    val precip: Double? = null,
+    val code: Int? = null,
+    val condition: String = "",
+    @SerialName("is_day") val isDay: Boolean = true,
+    @SerialName("cloud_cover") val cloudCover: Double? = null,
+    val pressure: Double? = null,
+    @SerialName("wind_speed") val windSpeed: Double? = null,
+    @SerialName("wind_gusts") val windGusts: Double? = null,
+    @SerialName("wind_dir") val windDir: Double? = null,
+    val uv: Double? = null,
+    val visibility: Double? = null
+)
+
+@Serializable
+data class WeatherHour(
+    val time: String,
+    val temp: Double? = null,
+    val code: Int? = null,
+    @SerialName("is_day") val isDay: Boolean = true,
+    @SerialName("precip_prob") val precipProb: Double? = null
+)
+
+@Serializable
+data class WeatherDay(
+    val date: String,
+    val code: Int? = null,
+    val condition: String = "",
+    val high: Double? = null,
+    val low: Double? = null,
+    @SerialName("precip_prob") val precipProb: Double? = null,
+    @SerialName("precip_sum") val precipSum: Double? = null,
+    val sunrise: String? = null,
+    val sunset: String? = null,
+    @SerialName("uv_max") val uvMax: Double? = null,
+    @SerialName("wind_max") val windMax: Double? = null
+)
+
+@Serializable
+data class AirQuality(
+    @SerialName("us_aqi") val usAqi: Double? = null,
+    @SerialName("european_aqi") val europeanAqi: Double? = null,
+    @SerialName("pm2_5") val pm25: Double? = null,
+    val pm10: Double? = null
+)
+
+@Serializable
+data class WeatherReport(
+    val units: String = "imperial",
+    val labels: WeatherLabels = WeatherLabels(),
+    val updated: String = "",
+    val current: WeatherNow = WeatherNow(),
+    val hourly: List<WeatherHour> = emptyList(),
+    val daily: List<WeatherDay> = emptyList(),
+    val air: AirQuality? = null,
+    val fetchedAt: Long = 0
+)

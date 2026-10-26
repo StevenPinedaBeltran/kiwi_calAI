@@ -1,43 +1,28 @@
 package dev.kiwicalendar.ui.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,24 +32,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.kiwicalendar.data.AppContainer
 import dev.kiwicalendar.data.AppSettings
 import dev.kiwicalendar.data.Event
+import dev.kiwicalendar.ui.DottedDivider
+import dev.kiwicalendar.ui.GlyphIcon
+import dev.kiwicalendar.ui.Glyphs
+import dev.kiwicalendar.ui.Mono
 import dev.kiwicalendar.ui.Occurrence
-import dev.kiwicalendar.ui.components.Clock
+import dev.kiwicalendar.ui.PrimaryButton
+import dev.kiwicalendar.ui.RoundButton
+import dev.kiwicalendar.ui.dashedBorder
+import dev.kiwicalendar.ui.eventTone
 import dev.kiwicalendar.ui.formatTime
+import dev.kiwicalendar.ui.glass
 import dev.kiwicalendar.ui.occurrencesByDay
-import dev.kiwicalendar.ui.parseHexColor
-import dev.kiwicalendar.ui.relativeDay
-import dev.kiwicalendar.ui.textOn
-import dev.kiwicalendar.ui.timeRange
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDate
+import java.time.Month
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -73,28 +65,19 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
-private val MonthTitle = DateTimeFormatter.ofPattern("MMMM yyyy")
-private val LongDay = DateTimeFormatter.ofPattern("EEEE, MMMM d")
-private val ShortDay = DateTimeFormatter.ofPattern("MMMM d")
+private val PanelDate = DateTimeFormatter.ofPattern("MMMM d, yyyy")
+private val Hour24 = DateTimeFormatter.ofPattern("HH:00")
 
 @Composable
-fun CalendarScreen(
-    container: AppContainer,
-    settings: AppSettings,
-    today: LocalDate,
-    onSleep: () -> Unit,
-    onSettings: () -> Unit
-) {
+fun CalendarContent(container: AppContainer, settings: AppSettings, today: LocalDate) {
     val snapshot by container.repository.snapshot.collectAsStateWithLifecycle()
-    val status by container.repository.status.collectAsStateWithLifecycle()
     val zone = remember { ZoneId.systemDefault() }
 
-    // Keyed on today so the calendar jumps back to the current month at midnight.
+    // Keyed on today so the calendar returns to the current month at midnight.
     var month by rememberSaveable(today) { mutableStateOf(YearMonth.from(today)) }
     var selected by rememberSaveable(today) { mutableStateOf(today) }
     var creating by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf<Event?>(null) }
-    var showPhoneCode by remember { mutableStateOf(false) }
 
     val firstDayOfWeek = if (settings.weekStartsMonday) DayOfWeek.MONDAY else DayOfWeek.SUNDAY
     val gridStart = month.atDay(1).with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
@@ -104,74 +87,60 @@ fun CalendarScreen(
         occurrencesByDay(snapshot.events, minOf(gridStart, selected), maxOf(gridEnd, selected), zone)
     }
 
-    BoxWithConstraints(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .safeDrawingPadding()
-    ) {
-        val wide = maxWidth > maxHeight
-        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp)) {
-            Header(
-                month = month,
-                today = today,
-                wide = wide,
-                offline = status.error != null,
-                use24h = settings.use24h,
-                onPrevious = { month = month.minusMonths(1) },
-                onNext = { month = month.plusMonths(1) },
-                onToday = {
-                    month = YearMonth.from(today)
-                    selected = today
-                },
-                onAdd = { creating = true },
-                onPhone = { showPhoneCode = true },
-                onSleep = onSleep,
-                onSettings = onSettings
-            )
-            Spacer(Modifier.height(16.dp))
+    fun select(day: LocalDate) {
+        selected = day
+        month = YearMonth.from(day)
+    }
 
-            val grid: @Composable (Modifier) -> Unit = { modifier ->
-                MonthGrid(
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth > 900.dp
+        val panelShape = RoundedCornerShape(30.dp)
+        val monthPanel = @Composable { modifier: Modifier ->
+            Column(modifier.padding(24.dp)) {
+                MonthHeader(
                     month = month,
-                    gridStart = gridStart,
-                    weeks = weeks,
-                    today = today,
-                    selected = selected,
-                    byDay = byDay,
-                    use24h = settings.use24h,
-                    onSelect = { selected = it },
-                    modifier = modifier
-                )
-            }
-            val agenda: @Composable (Modifier) -> Unit = { modifier ->
-                AgendaPanel(
-                    day = selected,
-                    today = today,
-                    occurrences = byDay[selected].orEmpty(),
-                    use24h = settings.use24h,
-                    onOpen = { opened = it },
+                    onMonth = { month = it },
                     onAdd = { creating = true },
-                    modifier = modifier
+                    onPrevious = { month = month.minusMonths(1) },
+                    onNext = { month = month.plusMonths(1) }
                 )
+                Spacer(Modifier.height(18.dp))
+                MonthGrid(month, gridStart, weeks, today, selected, byDay, onSelect = {
+                    selected = it
+                }, modifier = Modifier.weight(1f))
             }
-            if (wide) {
-                Row(Modifier.weight(1f)) {
-                    grid(Modifier.weight(2.4f).fillMaxHeight())
-                    Spacer(Modifier.width(16.dp))
-                    agenda(Modifier.weight(1f).fillMaxHeight())
-                }
-            } else {
-                grid(Modifier.weight(1.3f).fillMaxWidth())
-                Spacer(Modifier.height(16.dp))
-                agenda(Modifier.weight(1f).fillMaxWidth())
+        }
+        val schedule = @Composable { modifier: Modifier ->
+            SchedulePanel(
+                day = selected,
+                occurrences = byDay[selected].orEmpty(),
+                use24h = settings.use24h,
+                onToday = { select(today) },
+                onPrevious = { select(selected.minusDays(1)) },
+                onNext = { select(selected.plusDays(1)) },
+                onOpen = { opened = it },
+                onAdd = { creating = true },
+                modifier = modifier
+            )
+        }
+        if (wide) {
+            Row(Modifier.fillMaxSize().glass(panelShape, fill = Color.White.copy(alpha = 0.035f))) {
+                monthPanel(Modifier.weight(1f).fillMaxHeight())
+                Box(Modifier.width(1.dp).fillMaxHeight().background(Mono.Hairline))
+                schedule(Modifier.width(340.dp).fillMaxHeight().padding(22.dp))
+            }
+        } else {
+            Column(Modifier.fillMaxSize().glass(panelShape, fill = Color.White.copy(alpha = 0.035f))) {
+                monthPanel(Modifier.weight(1.4f).fillMaxWidth())
+                Box(Modifier.height(1.dp).fillMaxWidth().background(Mono.Hairline))
+                schedule(Modifier.weight(1f).fillMaxWidth().padding(22.dp))
             }
         }
     }
 
     val current = opened
     when {
-        creating -> EventDialog(
+        creating -> EventEditor(
             initial = null,
             defaultDate = selected,
             use24h = settings.use24h,
@@ -182,7 +151,7 @@ fun CalendarScreen(
             },
             onDelete = {}
         )
-        current != null && current.isLocal -> EventDialog(
+        current != null && current.isLocal -> EventEditor(
             initial = current,
             defaultDate = selected,
             use24h = settings.use24h,
@@ -196,77 +165,62 @@ fun CalendarScreen(
                 opened = null
             }
         )
-        current != null -> EventDetailsDialog(current, settings.use24h, onDismiss = { opened = null })
+        current != null -> EventDetails(current, settings.use24h, onDismiss = { opened = null })
     }
-    if (showPhoneCode) PhoneCodeDialog(settings, onDismiss = { showPhoneCode = false })
 }
 
 @Composable
-private fun Header(
+private fun MonthHeader(
     month: YearMonth,
-    today: LocalDate,
-    wide: Boolean,
-    offline: Boolean,
-    use24h: Boolean,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onToday: () -> Unit,
+    onMonth: (YearMonth) -> Unit,
     onAdd: () -> Unit,
-    onPhone: () -> Unit,
-    onSleep: () -> Unit,
-    onSettings: () -> Unit
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(month.format(MonthTitle), style = MaterialTheme.typography.displaySmall, maxLines = 1)
-            Text(
-                text = if (offline) "Offline, showing saved events" else today.format(LongDay),
-                style = MaterialTheme.typography.titleMedium,
-                color = if (offline) colors.error else colors.onSurfaceVariant
-            )
-        }
-        IconButton(onClick = onPrevious) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous month")
-        }
-        TextButton(onClick = onToday) { Text("Today") }
-        IconButton(onClick = onNext) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next month")
-        }
-        Spacer(Modifier.width(8.dp))
-        HeaderAction(Icons.Default.Add, "Add", wide, onAdd, primary = true)
-        HeaderAction(Icons.Default.Phone, "From phone", wide, onPhone)
-        HeaderAction(Icons.Default.PlayArrow, "Photos", wide, onSleep)
-        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
-        if (wide) {
-            Spacer(Modifier.width(12.dp))
-            Clock(use24h, style = MaterialTheme.typography.displaySmall)
-        }
+        Picker(
+            label = month.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault()),
+            options = Month.values().map { it.getDisplayName(DateTextStyle.FULL, Locale.getDefault()) to it.value },
+            onPick = { onMonth(month.withMonth(it)) }
+        )
+        Spacer(Modifier.width(28.dp))
+        Picker(
+            label = month.year.toString(),
+            options = (month.year - 3..month.year + 5).map { it.toString() to it },
+            onPick = { onMonth(month.withYear(it)) }
+        )
+        Spacer(Modifier.weight(1f))
+        RoundButton(Glyphs.Plus, "New event", onAdd, 44.dp)
+        Spacer(Modifier.width(10.dp))
+        RoundButton(Glyphs.ChevronLeft, "Previous month", onPrevious, 44.dp)
+        Spacer(Modifier.width(10.dp))
+        RoundButton(Glyphs.ChevronRight, "Next month", onNext, 44.dp)
     }
 }
 
 @Composable
-private fun HeaderAction(
-    icon: ImageVector,
-    label: String,
-    showLabel: Boolean,
-    onClick: () -> Unit,
-    primary: Boolean = false
-) {
-    if (!showLabel) {
-        IconButton(onClick = onClick) { Icon(icon, contentDescription = label) }
-        return
-    }
-    val content: @Composable RowScope.() -> Unit = {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label)
-    }
-    val modifier = Modifier.padding(start = 8.dp)
-    if (primary) {
-        Button(onClick = onClick, modifier = modifier, content = content)
-    } else {
-        OutlinedButton(onClick = onClick, modifier = modifier, content = content)
+private fun Picker(label: String, options: List<Pair<String, Int>>, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.clip(RoundedCornerShape(10.dp)).clickable { open = true }.padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.headlineMedium.copy(fontSize = 30.sp))
+            Spacer(Modifier.width(8.dp))
+            GlyphIcon(Glyphs.ChevronDown, 18.dp, Mono.Muted)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (text, value) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = {
+                        onPick(value)
+                        open = false
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -278,19 +232,19 @@ private fun MonthGrid(
     today: LocalDate,
     selected: LocalDate,
     byDay: Map<LocalDate, List<Occurrence>>,
-    use24h: Boolean,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier
 ) {
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
             repeat(7) { i ->
                 Text(
                     text = gridStart.plusDays(
                         i.toLong()
-                    ).dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.getDefault()),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ).dayOfWeek.getDisplayName(DateTextStyle.FULL, Locale.getDefault()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Mono.Faint,
+                    maxLines = 1,
                     modifier = Modifier.weight(1f).padding(start = 10.dp)
                 )
             }
@@ -299,13 +253,12 @@ private fun MonthGrid(
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 repeat(7) { dayIndex ->
                     val date = gridStart.plusDays((week * 7 + dayIndex).toLong())
-                    DayCell(
+                    DayCard(
                         date = date,
                         inMonth = YearMonth.from(date) == month,
                         isToday = date == today,
                         isSelected = date == selected,
                         occurrences = byDay[date].orEmpty(),
-                        use24h = use24h,
                         onClick = { onSelect(date) },
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
@@ -315,61 +268,67 @@ private fun MonthGrid(
     }
 }
 
-private val ChipSlot = 21.dp
+private val LabelSlot = 17.dp
 
 @Composable
-private fun DayCell(
+private fun DayCard(
     date: LocalDate,
     inMonth: Boolean,
     isToday: Boolean,
     isSelected: Boolean,
     occurrences: List<Occurrence>,
-    use24h: Boolean,
     onClick: () -> Unit,
     modifier: Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
-    val background = when {
-        isSelected -> colors.primaryContainer
-        inMonth -> colors.surface
-        else -> colors.surface.copy(alpha = 0.45f)
+    val shape = RoundedCornerShape(16.dp)
+    val base = modifier.padding(5.dp).clip(shape)
+    val surface = when {
+        isToday -> base.background(Brush.linearGradient(listOf(Color.White, Color(0xFFB8B8B8))))
+        isSelected -> base.background(
+            Color.White.copy(alpha = 0.09f)
+        ).dashedBorder(Color.White.copy(alpha = 0.8f), 16.dp)
+        else ->
+            base
+                .background(Color.White.copy(alpha = if (inMonth) 0.055f else 0.02f))
+                .border(1.dp, Color.White.copy(alpha = if (inMonth) 0.10f else 0.05f), shape)
     }
-    BoxWithConstraints(
-        modifier
-            .padding(3.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(background)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 5.dp)
-    ) {
-        val slots = ((maxHeight - 32.dp) / ChipSlot).toInt().coerceAtLeast(0)
+    val ink = if (isToday) Color.Black else Color.White
+    BoxWithConstraints(surface.clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Text(
+            text = date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp),
+            color = ink.copy(alpha = if (inMonth || isToday) 1f else 0.3f),
+            modifier = Modifier.align(Alignment.TopStart)
+        )
+        val slots = ((maxHeight - 38.dp) / LabelSlot).toInt().coerceAtLeast(0)
         val shown = if (occurrences.size > slots) (slots - 1).coerceAtLeast(0) else occurrences.size
-        Column {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(if (isToday) colors.primary else Color.Transparent),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = when {
-                        isToday -> colors.onPrimary
-                        inMonth -> colors.onSurface
-                        else -> colors.onSurfaceVariant.copy(alpha = 0.5f)
-                    }
-                )
+        Column(Modifier.align(Alignment.BottomStart)) {
+            occurrences.take(shown).forEach { occurrence ->
+                Row(Modifier.height(LabelSlot), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .width(2.dp)
+                            .height(10.dp)
+                            .background(
+                                if (isToday) Color.Black.copy(alpha = 0.7f) else eventTone(occurrence.event.color)
+                            )
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = occurrence.event.title,
+                        fontSize = 11.sp,
+                        color = ink.copy(alpha = if (inMonth || isToday) 0.85f else 0.3f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
-            Spacer(Modifier.height(4.dp))
-            occurrences.take(shown).forEach { EventChip(it, date, use24h) }
             if (occurrences.size > shown) {
                 Text(
                     text = "${occurrences.size - shown} more",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1
+                    fontSize = 11.sp,
+                    color = ink.copy(alpha = 0.55f),
+                    modifier = Modifier.height(LabelSlot)
                 )
             }
         }
@@ -377,72 +336,61 @@ private fun DayCell(
 }
 
 @Composable
-private fun EventChip(occurrence: Occurrence, day: LocalDate, use24h: Boolean) {
-    val color = parseHexColor(occurrence.event.color) ?: MaterialTheme.colorScheme.primary
-    if (occurrence.allDay) {
-        Box(
-            modifier = Modifier
-                .padding(bottom = 2.dp)
-                .fillMaxWidth()
-                .height(ChipSlot - 2.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(color)
-                .padding(horizontal = 6.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text = occurrence.event.title,
-                color = textOn(color),
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    } else {
-        Row(Modifier.fillMaxWidth().height(ChipSlot), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.width(5.dp))
-            val time = if (occurrence.firstDay == day) formatTime(occurrence.start.toLocalTime(), use24h) + " " else ""
-            Text(
-                text = time + occurrence.event.title,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun AgendaPanel(
+private fun SchedulePanel(
     day: LocalDate,
-    today: LocalDate,
     occurrences: List<Occurrence>,
     use24h: Boolean,
+    onToday: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     onOpen: (Event) -> Unit,
     onAdd: () -> Unit,
     modifier: Modifier
 ) {
-    Surface(modifier, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(20.dp)) {
-            Text(
-                relativeDay(day, today),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(day.format(ShortDay), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(12.dp))
-            if (occurrences.isEmpty()) {
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Scheduled", style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp))
+                Text(day.format(PanelDate), style = MaterialTheme.typography.bodyMedium, color = Mono.Muted)
+            }
+            RoundButton(Glyphs.Calendar, "Go to today", onToday, 40.dp)
+            Spacer(Modifier.width(8.dp))
+            RoundButton(Glyphs.ChevronLeft, "Previous day", onPrevious, 40.dp)
+            Spacer(Modifier.width(8.dp))
+            RoundButton(Glyphs.ChevronRight, "Next day", onNext, 40.dp)
+        }
+        Spacer(Modifier.height(18.dp))
+        if (occurrences.isEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Nothing scheduled", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    "Nothing planned.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "Tap + or scan the phone code to add something.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Mono.Muted
                 )
-                TextButton(onClick = onAdd, contentPadding = PaddingValues(0.dp)) { Text("Add an event") }
-            } else {
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    items(occurrences, key = { it.event.id }) { occurrence ->
-                        AgendaRow(occurrence, day, use24h, onClick = { onOpen(occurrence.event) })
+                Spacer(Modifier.height(18.dp))
+                PrimaryButton("New event", onAdd)
+            }
+        } else {
+            val groups = remember(occurrences, use24h) {
+                occurrences.groupBy { occurrence ->
+                    when {
+                        occurrence.allDay || occurrence.firstDay != day -> "All day"
+                        use24h -> occurrence.start.format(Hour24)
+                        else -> formatTime(occurrence.start.toLocalTime().withMinute(0), false)
+                    }
+                }.toList()
+            }
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                groups.forEach { (label, group) ->
+                    item(key = "label-$label") { TimeLabel(label) }
+                    items(group, key = { it.event.id }) { occurrence ->
+                        ScheduleCard(occurrence, day, use24h, onClick = { onOpen(occurrence.event) })
                     }
                 }
             }
@@ -451,31 +399,67 @@ private fun AgendaPanel(
 }
 
 @Composable
-private fun AgendaRow(occurrence: Occurrence, day: LocalDate, use24h: Boolean, onClick: () -> Unit) {
-    val color = parseHexColor(occurrence.event.color) ?: MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
+private fun TimeLabel(label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = Mono.Muted)
+        Spacer(Modifier.width(12.dp))
+        Box(Modifier.weight(1f).height(1.dp).background(Mono.Hairline))
+    }
+}
+
+private fun durationLabel(occurrence: Occurrence): String {
+    val minutes = Duration.between(occurrence.start, occurrence.end).toMinutes()
+    return when {
+        minutes <= 0 -> ""
+        minutes < 60 -> "$minutes min"
+        minutes % 60 == 0L -> if (minutes == 60L) "1 hour" else "${minutes / 60} hours"
+        else -> "${minutes / 60} hr ${minutes % 60} min"
+    }
+}
+
+@Composable
+private fun ScheduleCard(occurrence: Occurrence, day: LocalDate, use24h: Boolean, onClick: () -> Unit) {
+    val event = occurrence.event
+    Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .glass(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp)
-            .height(IntrinsicSize.Min)
+            .padding(16.dp)
     ) {
-        Box(Modifier.width(4.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(color))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(occurrence.event.title, style = MaterialTheme.typography.titleMedium)
-            Text(timeRange(occurrence, day, use24h), style = MaterialTheme.typography.bodyMedium, color = muted)
-            val where = listOfNotNull(occurrence.event.location, occurrence.event.calendar).joinToString(", ")
-            if (where.isNotEmpty()) {
-                Text(
-                    text = where,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(eventTone(event.color)))
+        Spacer(Modifier.height(14.dp))
+        Text(
+            event.title,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        val subtitle = event.location ?: event.calendar ?: event.notes?.lineSequence()?.firstOrNull()
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Mono.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        DottedDivider()
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlyphIcon(Glyphs.Clock, 16.dp, Mono.Muted)
+            Spacer(Modifier.width(8.dp))
+            val range = if (occurrence.allDay || occurrence.firstDay != day) {
+                "All day"
+            } else {
+                formatTime(occurrence.start.toLocalTime(), use24h) + " – " +
+                    formatTime(occurrence.end.toLocalTime(), use24h)
+            }
+            Text(range, style = MaterialTheme.typography.bodyMedium, color = Mono.Muted, modifier = Modifier.weight(1f))
+            if (!occurrence.allDay) {
+                Text(durationLabel(occurrence), style = MaterialTheme.typography.bodyMedium, color = Mono.Muted)
             }
         }
     }
