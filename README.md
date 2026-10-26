@@ -116,11 +116,13 @@ Forecasts come from [Open-Meteo](https://open-meteo.com/), which needs no API ke
 
 Choose teams during setup or later in Settings. Supported leagues: NFL, college football, NBA, WNBA, men's and women's college basketball, MLB, NHL, MLS, Premier League, La Liga, and the Champions League.
 
-For each team, the photo screen shows the most relevant game: a live game first, then today's game, then the latest result, then the next game. Scores update every two minutes while photos are showing. They come from ESPN's public site API, which is free and widely used but undocumented, so it can change without notice.
+For each followed team, the dashboard and tablet show its latest score **only if the game started within the last seven days** (the previous 168 hours). Active games appear first, followed by the most recent final results. Upcoming games and older scores are hidden; a team that hasn't played in a week has no score card. Even offline, cached scores disappear when they pass the seven-day limit. Scores refresh every two minutes while the Android app is active. Data comes from ESPN's unofficial site API, which can change without notice.
 
 ## Photo mode and quiet hours
 
 Photo mode starts after the calendar sits untouched for the time you choose (five minutes by default), or when you tap the photos button in the sidebar. Photos fill the whole screen, cropping the edges where a photo's shape doesn't match the display, with a slow zoom while each one shows. Tap anywhere to return to the calendar.
+
+Sometimes I just want it to look like a picture frame. Long-press anywhere in photo mode and the clock and widgets fade out; long-press again to bring them back. It remembers how you left it. If you only want to hide some of it, there are switches under **Settings > Display > While photos play**.
 
 With quiet hours turned on, the screen dims overnight and shows only a clock. Touching it brings the calendar back for a minute.
 
@@ -161,6 +163,10 @@ The web page has buttons to refresh feeds and the album immediately, so you rare
 ## Signing
 
 Android only installs an update over an existing app if both are signed with the same key. Create one key, once, and store it as repository secrets:
+
+**Windows:** run `powershell -ExecutionPolicy Bypass -File scripts\make-signing-key.ps1`. It uses Java's `keytool` if installed, otherwise Docker Desktop, saves the key in a `kiwi-calendar-signing` folder in your user folder (outside the repo), copies the base64 value to your clipboard, and prints the four secrets to add.
+
+**Mac or Linux:**
 
 ```sh
 keytool -genkeypair -v -keystore kiwi-calendar.jks -alias kiwi \
@@ -230,6 +236,17 @@ Timed events use ISO 8601 with an offset (`2026-10-26T18:30:00-05:00`). All-day 
 The access token works like a shared password, and the QR code contains it, so anyone who scans or photographs the code can add and delete events. Keep the server on your home network. If you want to add events from outside the house, use a VPN such as Tailscale or WireGuard, or put the server behind a reverse proxy with HTTPS, rather than forwarding port 8080. Change the token by setting `KIWI_TOKEN` (or deleting the `token` file in the data volume) and restarting; then enter the new one on the tablet under Settings.
 
 The app allows plain HTTP because home servers rarely have certificates.
+
+## Make it yours
+
+I built this for my own wall, but you're welcome to fork it and change it for whatever you need: different hardware, other leagues, a new look, or ripping out the parts you don't use. No need to ask first.
+
+1. Click **Fork** on GitHub.
+2. Add your own signing secrets (see [Signing](#signing)). Your fork gets its own key, so its builds won't install over mine.
+3. Push, and the Actions workflows build your APK and server image under your account.
+4. Point `docker-compose.yml` at your image, or keep building it locally.
+
+If you want your own app alongside this one on the same tablet, change `applicationId` in `android/app/build.gradle.kts` too.
 
 ## License
 

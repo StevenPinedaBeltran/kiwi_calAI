@@ -66,7 +66,8 @@ data class TeamRef(
     val id: String,
     val name: String,
     val abbr: String = "",
-    val color: String? = null
+    val color: String? = null,
+    val logo: String? = null
 )
 
 @Serializable
@@ -75,6 +76,7 @@ data class GameSide(
     val abbr: String = "",
     val name: String = "",
     val color: String? = null,
+    val logo: String? = null,
     val score: String? = null
 )
 
@@ -88,6 +90,15 @@ data class Game(
     val home: GameSide? = null,
     val away: GameSide? = null
 )
+
+/** Exclude old results even when the tablet has been offline for days. */
+fun Game.isRecentScore(now: java.time.Instant = java.time.Instant.now()): Boolean {
+    if (state != "in" && state != "post") return false
+    val started = runCatching { java.time.OffsetDateTime.parse(start).toInstant() }.getOrNull()
+        ?: return false
+    val elapsed = java.time.Duration.between(started, now)
+    return !elapsed.isNegative && elapsed <= java.time.Duration.ofDays(7)
+}
 
 /** A local change waiting to be sent to the server. */
 @Serializable

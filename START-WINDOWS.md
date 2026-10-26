@@ -82,6 +82,6 @@ The Android APK is **not** rebuilt by starting Docker; its source stays in `andr
 
 ### Weather and sports after upgrading
 
-The Home page now has Weather and Sports scores cards. Search for your weather location and choose a team to follow. On Android, select the location in **Settings → Weather** and teams in **Settings → Teams**. The tablet's sports scores now refresh while the app is running (not only while the sleep screen is open). Weather follows your selected city's timezone and units.
+The Home page now has Weather and Recent scores cards (games started within the last seven days only). Search for your weather location and choose a team to follow. On Android, select the location in **Settings → Weather** and teams in **Settings → Teams**. The tablet's sports scores now refresh while the app is running (not only while the sleep screen is open). Weather follows your selected city's timezone and units.
 
 See **`WIDGETS-AND-TESTING.md`** for widget refresh rates, data sources, offline behavior, and troubleshooting. Website selections remain in the current browser; Android team/location settings are separate.

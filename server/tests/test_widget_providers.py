@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 
-from app.sports import Sports, parse_event, pick_game
+from app.sports import Sports, is_recent_score, parse_event, pick_game
 from app.weather import Weather, normalize
 
 
@@ -22,32 +22,74 @@ def _game(game_id, stamp, state):
     }
 
 
-def test_schedule_fallback_picks_upcoming_game_and_deduplicates():
+def test_recent_score_selection_excludes_future_and_old_results():
+    zone = ZoneInfo("America/Chicago")
+    now = datetime.now(zone)
+    old = parse_event("nfl", _game("old", now - timedelta(days=8), "post"))
+    recent = parse_event("nfl", _game("recent", now - timedelta(days=2), "post"))
+    newest = parse_event("nfl", _game("newest", now - timedelta(hours=5), "post"))
+    upcoming = parse_event("nfl", _game("future", now + timedelta(hours=2), "pre"))
+    live = parse_event("nfl", _game("live", now - timedelta(minutes=15), "in"))
+    assert not is_recent_score(old, now)
+    assert not is_recent_score(upcoming, now)
+    assert is_recent_score(recent, now)
+    assert pick_game([old, upcoming], now) is None
+    assert pick_game([old, upcoming, recent, newest], now)["id"] == "newest"
+    assert pick_game([old, upcoming, recent, live], now)["id"] == "live"
+    boundary = {"state": "post", "start": (now - timedelta(days=7)).isoformat()}
+    expired = {"state": "post", "start": (now - timedelta(days=7, seconds=1)).isoformat()}
+    assert is_recent_score(boundary, now) and not is_recent_score(expired, now)
+    assert not is_recent_score({"state": "post", "start": "not-a-date"}, now)
+
+
+def test_schedule_fallback_picks_recent_final_not_upcoming_and_deduplicates():
     asyncio.run(_check_schedule_fallback())
 
 
 async def _check_schedule_fallback():
     zone = ZoneInfo("America/Chicago")
     now = datetime.now(zone)
-    past = _game("past", now - timedelta(days=3), "post")
+    old = _game("old", now - timedelta(days=8), "post")
+    recent = _game("recent", now - timedelta(days=3), "post")
     upcoming = _game("next", now + timedelta(days=3), "pre")
     calls = []
 
     def fake(request):
         calls.append(request.url.path)
         if request.url.path.endswith("/scoreboard"):
-            return httpx.Response(200, json={"events": [past]})
+            return httpx.Response(200, json={"events": [old, upcoming]})
         if request.url.path.endswith("/schedule"):
-            return httpx.Response(200, json={"events": [past, upcoming]})
+            return httpx.Response(200, json={"events": [old, recent, upcoming]})
         return httpx.Response(404)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(fake)) as client:
         provider = Sports(client, zone)
         games = await provider.scores([("nfl", "3"), ("nfl", "9")])
-        assert len(games) == 1 and games[0]["id"] == "next"
-        assert pick_game([parse_event("nfl", past), parse_event("nfl", upcoming)], now.date(), zone)["id"] == "next"
+        assert len(games) == 1 and games[0]["id"] == "recent"
+        assert pick_game([parse_event("nfl", old), parse_event("nfl", recent), parse_event("nfl", upcoming)], now)["id"] == "recent"
         await provider.scores([("nfl", "3")])
         assert sum(p.endswith("/scoreboard") for p in calls) == 1
+
+
+def test_no_scores_when_team_has_not_played_in_a_week():
+    asyncio.run(_check_no_scores_in_week())
+
+
+async def _check_no_scores_in_week():
+    zone = ZoneInfo("America/Chicago")
+    now = datetime.now(zone)
+    old = _game("old", now - timedelta(days=9), "post")
+    upcoming = _game("future", now + timedelta(days=1), "pre")
+
+    def fake(request):
+        if request.url.path.endswith("/scoreboard"):
+            return httpx.Response(200, json={"events": [old, upcoming]})
+        if request.url.path.endswith("/schedule"):
+            return httpx.Response(200, json={"events": [old, upcoming]})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(fake)) as client:
+        assert await Sports(client, zone).scores([("nfl", "3")]) == []
 
 
 def test_scores_provider_outage_is_not_empty_success():

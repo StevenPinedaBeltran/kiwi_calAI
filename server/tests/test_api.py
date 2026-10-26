@@ -6,7 +6,7 @@ from app.feeds import expand
 from app.scheduler import seconds_until
 from app.sports import pick_game
 
-from .conftest import AUTH, ICS
+from .conftest import AUTH, ICS, SCOREBOARD
 
 
 def test_health_is_public(client):
@@ -148,24 +148,24 @@ def test_teams_and_scores(client):
     game = games[0]
     assert game["state"] == "in"
     assert game["home"]["score"] == "21"
-    assert game["start"] == "2026-10-25T18:00:00+00:00"
+    assert game["start"] == datetime.fromisoformat(SCOREBOARD["events"][0]["date"]).isoformat(timespec="seconds")
 
 
-def test_pick_game_prefers_live_then_today_then_next_game_then_latest_final():
+def test_pick_game_only_recent_scores():
     tz = ZoneInfo("America/Chicago")
-    today = date(2026, 10, 25)
+    now = datetime(2026, 10, 25, 15, 0, tzinfo=tz)
 
     def game(state, start):
         return {"state": state, "start": start}
 
     final = game("post", "2026-10-24T01:00:00+00:00")
+    old = game("post", "2026-10-10T01:00:00+00:00")
     upcoming = game("pre", "2026-10-26T23:00:00+00:00")
-    tonight = game("pre", "2026-10-26T00:30:00+00:00")
     live = game("in", "2026-10-25T18:00:00+00:00")
-    assert pick_game([final, upcoming, tonight, live], today, tz) is live
-    assert pick_game([final, upcoming, tonight], today, tz) is tonight
-    assert pick_game([final, upcoming], today, tz) is upcoming
-    assert pick_game([upcoming], today, tz) is upcoming
+    assert pick_game([final, upcoming, live], now) is live
+    assert pick_game([final, upcoming], now) is final
+    assert pick_game([old, upcoming], now) is None
+    assert pick_game([upcoming], now) is None
 
 
 def test_seconds_until_rolls_to_tomorrow():

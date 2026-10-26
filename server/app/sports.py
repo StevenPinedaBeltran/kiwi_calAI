@@ -5,8 +5,9 @@ so several tablets polling the server don't hammer ESPN.
 """
 
 import time
-from datetime import date, datetime, timedelta, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -35,6 +36,24 @@ def _color(value: str | None) -> str | None:
     return None
 
 
+def _logo(team: dict[str, Any]) -> str | None:
+    """Only expose HTTPS logo URLs hosted by ESPN's image CDN."""
+    candidates = [team.get("logo")]
+    candidates.extend(item.get("href") for item in (team.get("logos") or []) if isinstance(item, dict))
+    for value in candidates:
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = urlsplit(value)
+            if (parsed.scheme == "https" and parsed.hostname and
+                    (parsed.hostname == "espncdn.com" or parsed.hostname.endswith(".espncdn.com")) and
+                    not parsed.username and not parsed.password):
+                return value
+        except ValueError:
+            continue
+    return None
+
+
 def _score(value: Any) -> str | None:
     if isinstance(value, dict):
         value = value.get("displayValue") or value.get("value")
@@ -52,6 +71,7 @@ def parse_event(league: str, event: dict[str, Any]) -> dict[str, Any]:
             "abbr": team.get("abbreviation", ""),
             "name": team.get("shortDisplayName") or team.get("displayName", ""),
             "color": _color(team.get("color")),
+            "logo": _logo(team),
             "score": _score(competitor.get("score")),
         }
     return {
@@ -65,22 +85,37 @@ def parse_event(league: str, event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def pick_game(games: list[dict[str, Any]], today: date, tz: tzinfo) -> dict[str, Any] | None:
-    """Live, then today, then the next seven days, then the most recent final."""
+RECENT_SCORE_WINDOW = timedelta(days=7)
 
-    def rank(game: dict[str, Any]) -> tuple[int, float]:
+
+def is_recent_score(game: dict[str, Any], now: datetime) -> bool:
+    """Keep only live and completed games started in the last rolling 168 hours.
+
+    Do not treat future fixtures as scores or keep a stale 'last result' from
+    a team that hasn't played in the last week. All comparisons use instants,
+    so results crossing midnight / daylight saving time are handled correctly.
+    """
+    if game.get("state") not in ("in", "post"):
+        return False
+    try:
         start = datetime.fromisoformat(game["start"])
-        if game["state"] == "in":
-            return (0, 0)
-        if start.astimezone(tz).date() == today:
-            return (1, start.timestamp())
-        if game["state"] == "pre" and 0 <= (start.astimezone(tz).date() - today).days <= 7:
-            return (2, start.timestamp())
-        if game["state"] == "post":
-            return (3, -start.timestamp())
-        return (4, start.timestamp())
+        if start.tzinfo is None:
+            return False  # Unknown timezone: don't guess that a score is recent.
+        age = now.astimezone(timezone.utc) - start.astimezone(timezone.utc)
+        return timedelta(0) <= age <= RECENT_SCORE_WINDOW
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
 
-    return min(games, key=rank) if games else None
+
+def pick_game(games: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None:
+    """Latest live score, otherwise most recent completed result within 7 days."""
+    recent = [game for game in games if is_recent_score(game, now)]
+    if not recent:
+        return None
+    return max(recent, key=lambda game: (
+        game["state"] == "in",
+        datetime.fromisoformat(game["start"]).timestamp(),
+    ))
 
 
 class Sports:
@@ -117,6 +152,7 @@ class Sports:
                     "name": team.get("displayName", ""),
                     "abbr": team.get("abbreviation", ""),
                     "color": _color(team.get("color")),
+                    "logo": _logo(team),
                 }
             )
         return sorted(teams, key=lambda t: t["name"])
@@ -126,8 +162,9 @@ class Sports:
         params = {"limit": "300", **extra}
         if not weekly:
             today = datetime.now(self.tz).date()
-            # Today's-only ranges left the family display empty most off-days.
-            params["dates"] = f"{today - timedelta(days=3):%Y%m%d}-{today + timedelta(days=14):%Y%m%d}"
+            # Query the complete seven-day score window. The extra calendar
+            # day on either side covers UTC/local timezone boundaries.
+            params["dates"] = f"{today - timedelta(days=8):%Y%m%d}-{today + timedelta(days=1):%Y%m%d}"
         data = await self._get(f"{BASE}/{path}/scoreboard", params, ttl=60)
         games = []
         for event in data.get("events", []):
@@ -155,36 +192,38 @@ class Sports:
         return games
 
     async def scores(self, teams: list[tuple[str, str]]) -> list[dict[str, Any]]:
-        today = datetime.now(self.tz).date()
+        now = datetime.now(self.tz)
         boards: dict[str, list[dict[str, Any]]] = {}
         result: dict[str, dict[str, Any]] = {}
         valid = [(league, team_id) for league, team_id in teams if league in LEAGUES and team_id.isdigit()]
         if not valid:
             return []
-        failures = 0
+        successes = 0
         for league, team_id in valid:
             if league not in boards:
                 try:
                     boards[league] = await self.scoreboard(league)
+                    successes += 1
                 except (httpx.HTTPError, ValueError, KeyError):
                     boards[league] = []
-                    failures += 1
             mine = [
                 g for g in boards[league]
                 if team_id in {(g["home"] or {}).get("id"), (g["away"] or {}).get("id")}
             ]
-            # A weekly scoreboard can omit teams on a bye; a finished game can
-            # remain the 'latest' for days. Check the team schedule for the next fixture.
-            if not any(g["state"] == "in" or
-                       (g["state"] == "pre" and datetime.fromisoformat(g["start"]).astimezone(self.tz).date() >= today)
-                       for g in mine):
+            # Some leagues return a narrow scoreboard (or NFL bye week).
+            # Look up team history only if the board lacks a qualifying score.
+            # Upcoming games never count as a result.
+            if not any(is_recent_score(g, now) for g in mine):
                 try:
                     mine.extend(await self.team_schedule(league, team_id))
+                    successes += 1
                 except (httpx.HTTPError, ValueError, KeyError):
                     pass  # The scoreboard is still usable when schedule lookup fails.
-            game = pick_game(mine, today, self.tz)
+            game = pick_game(mine, now)
             if game:
                 result.setdefault(f"{league}:{game['id']}", game)
-        if failures and not result:
+        if not successes:
             raise httpx.HTTPError("Sports provider is unavailable")
-        return sorted(result.values(), key=lambda g: (g["state"] != "in", g["start"]))
+        return sorted(result.values(), key=lambda g: (
+            g["state"] != "in", -datetime.fromisoformat(g["start"]).timestamp()
+        ))

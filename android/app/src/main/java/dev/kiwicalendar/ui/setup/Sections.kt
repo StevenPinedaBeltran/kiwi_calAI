@@ -362,6 +362,34 @@ fun DisplaySection(container: AppContainer) {
             selected = settings.photoSeconds,
             onSelect = { seconds -> store.update { it.copy(photoSeconds = seconds) } }
         )
+        Text("While photos play", style = MaterialTheme.typography.titleSmall)
+        SettingRow("Photos only", "Just the photos, nothing on top. You can also long-press the photo screen.") {
+            MonoSwitch(checked = settings.sleepPhotosOnly, onCheckedChange = { on ->
+                store.update { it.copy(sleepPhotosOnly = on) }
+            })
+        }
+        if (!settings.sleepPhotosOnly) {
+            SettingRow("Clock and date") {
+                MonoSwitch(checked = settings.sleepShowClock, onCheckedChange = { on ->
+                    store.update { it.copy(sleepShowClock = on) }
+                })
+            }
+            SettingRow("Up next", "Today's next few events") {
+                MonoSwitch(checked = settings.sleepShowAgenda, onCheckedChange = { on ->
+                    store.update { it.copy(sleepShowAgenda = on) }
+                })
+            }
+            SettingRow("Weather") {
+                MonoSwitch(checked = settings.sleepShowWeather, onCheckedChange = { on ->
+                    store.update { it.copy(sleepShowWeather = on) }
+                })
+            }
+            SettingRow("Sports scores") {
+                MonoSwitch(checked = settings.sleepShowScores, onCheckedChange = { on ->
+                    store.update { it.copy(sleepShowScores = on) }
+                })
+            }
+        }
         SettingRow("Quiet hours", "Dim the screen and show only the clock overnight") {
             MonoSwitch(checked = settings.quietEnabled, onCheckedChange = { on ->
                 store.update { it.copy(quietEnabled = on) }

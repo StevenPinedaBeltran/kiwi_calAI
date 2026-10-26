@@ -16,6 +16,12 @@ data class AppSettings(
     val teams: List<TeamRef> = emptyList(),
     val idleMinutes: Int = 5,
     val photoSeconds: Int = 30,
+    // photo mode overlays (sleepPhotosOnly beats the rest)
+    val sleepPhotosOnly: Boolean = false,
+    val sleepShowClock: Boolean = true,
+    val sleepShowAgenda: Boolean = true,
+    val sleepShowWeather: Boolean = true,
+    val sleepShowScores: Boolean = true,
     val appearance: String = "system", // system, dark, light
     val quietEnabled: Boolean = false,
     val quietStart: Int = 22 * 60,

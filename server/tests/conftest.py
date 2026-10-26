@@ -1,5 +1,6 @@
 import io
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -56,7 +57,7 @@ SCOREBOARD = {
     "events": [
         {
             "id": "401",
-            "date": "2026-10-25T18:00Z",
+            "date": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
             "competitions": [
                 {
                     "status": {"type": {"state": "in", "shortDetail": "Q3 5:12"}},

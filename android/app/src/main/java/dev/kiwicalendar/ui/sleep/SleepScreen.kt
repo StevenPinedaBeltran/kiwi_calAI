@@ -1,6 +1,7 @@
 package dev.kiwicalendar.ui.sleep
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -9,9 +10,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +34,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,18 +45,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import dev.kiwicalendar.data.AppContainer
 import dev.kiwicalendar.data.AppSettings
 import dev.kiwicalendar.data.Game
 import dev.kiwicalendar.data.GameSide
 import dev.kiwicalendar.data.matches
+import dev.kiwicalendar.data.isRecentScore
 import dev.kiwicalendar.ui.DottedDivider
 import dev.kiwicalendar.ui.Mono
 import dev.kiwicalendar.ui.Occurrence
@@ -88,6 +97,9 @@ fun SleepScreen(container: AppContainer, settings: AppSettings, quiet: Boolean, 
     val snapshot by container.repository.snapshot.collectAsStateWithLifecycle()
     val scores by container.repository.scores.collectAsStateWithLifecycle()
     val scoresFetchedAt by container.repository.scoresFetchedAt.collectAsStateWithLifecycle()
+    // Keep an independent minute clock so offline cached scores expire automatically.
+    val currentTime by rememberNow()
+    val recentScores = scores.filter { it.isRecentScore(currentTime.atZone(ZoneId.systemDefault()).toInstant()) }
     val scoresAreFresh = scoresFetchedAt > 0L &&
         System.currentTimeMillis() - scoresFetchedAt < 10 * 60 * 1000L
     val weather by container.repository.weather.collectAsStateWithLifecycle()
@@ -98,6 +110,34 @@ fun SleepScreen(container: AppContainer, settings: AppSettings, quiet: Boolean, 
             .filter { it.isFile && it.length() >= 100L }.shuffled()
     }
     var index by remember { mutableIntStateOf(0) }
+
+    // long-press = photos only on/off
+    val photosOnly = settings.sleepPhotosOnly
+    var hint by remember { mutableStateOf("") }
+    var hintVisible by remember { mutableStateOf(false) }
+    var hintToken by remember { mutableIntStateOf(0) }
+    val haptics = LocalHapticFeedback.current
+    val wake by rememberUpdatedState(onWake)
+    // only touches remembered state + the live setting, so it's fine inside pointerInput(Unit)
+    val togglePhotosOnly: () -> Unit = {
+        val next = !container.settings.value.sleepPhotosOnly
+        container.settings.update { it.copy(sleepPhotosOnly = next) }
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        hint = if (next) "Photos only. Long-press to get the widgets back." else "Widgets back on"
+        hintVisible = true
+        hintToken++
+    }
+    LaunchedEffect(hintToken) {
+        if (!hintVisible) return@LaunchedEffect
+        delay(2_500)
+        hintVisible = false
+    }
+
+    val sleepWeather = weather?.takeIf { w -> settings.weatherPlace?.let { w.matches(it, settings.units) } == true }
+    val showWeather = !photosOnly && settings.sleepShowWeather && sleepWeather != null
+    val showScores = !photosOnly && settings.sleepShowScores && recentScores.isNotEmpty()
+    val showClock = !photosOnly && settings.sleepShowClock
+    val showAgenda = !photosOnly && settings.sleepShowAgenda
 
     // Repair missing photos when the screensaver starts; no manual app restart needed.
     LaunchedEffect(photos.size, settings.isPaired, quiet) {
@@ -118,14 +158,12 @@ fun SleepScreen(container: AppContainer, settings: AppSettings, quiet: Boolean, 
         Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onWake
-            )
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { wake() }, onLongPress = { togglePhotosOnly() })
+            }
     ) {
         if (quiet) {
-            QuietClock(settings, weather?.takeIf { w -> settings.weatherPlace?.let { w.matches(it, settings.units) } == true }?.current?.temp)
+            QuietClock(settings, sleepWeather?.current?.temp)
         } else {
             if (photos.isNotEmpty()) {
                 Crossfade(
@@ -141,35 +179,75 @@ fun SleepScreen(container: AppContainer, settings: AppSettings, quiet: Boolean, 
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
-            // Scrims keep text readable over bright photos without boxing the whole picture.
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)))
-            )
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.55f)
-                    .align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
-            )
+            // scrims keep text readable on bright photos, and fade out with whatever sits on them
+            AnimatedVisibility(
+                visible = showWeather || showScores,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(600)),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(260.dp)
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)))
+                )
+            }
+            AnimatedVisibility(
+                visible = showClock || showAgenda,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(600)),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.55f)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
+                )
+            }
 
-            weather?.takeIf { w -> settings.weatherPlace?.let { w.matches(it, settings.units) } == true }
-                ?.let { SleepWeatherCard(it, settings.use24h, Modifier.align(Alignment.TopStart).padding(36.dp)) }
-            if (scores.isNotEmpty()) {
-                Column(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(36.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    scores.take(4).forEach { ScoreCard(it, settings.use24h, scoresAreFresh) }
+            AnimatedVisibility(
+                visible = showWeather,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(600)),
+                modifier = Modifier.align(Alignment.TopStart).padding(36.dp)
+            ) {
+                sleepWeather?.let { SleepWeatherCard(it, settings.use24h) }
+            }
+            AnimatedVisibility(
+                visible = showScores,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(600)),
+                modifier = Modifier.align(Alignment.TopEnd).padding(36.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    recentScores.take(4).forEach { ScoreCard(it, settings.use24h, scoresAreFresh) }
                 }
             }
-            TimeAndAgenda(
-                container,
-                settings,
-                Modifier.align(Alignment.BottomStart).padding(start = 44.dp, bottom = 40.dp)
+            AnimatedVisibility(
+                visible = showClock || showAgenda,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(600)),
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 44.dp, bottom = 40.dp)
+            ) {
+                TimeAndAgenda(container, settings, showClock, showAgenda, Modifier)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = hintVisible,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(400)),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 28.dp)
+        ) {
+            Text(
+                hint,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                modifier = Modifier
+                    .glass(RoundedCornerShape(50), fill = Frosted, border = FrostEdge)
+                    .padding(horizontal = 22.dp, vertical = 12.dp)
             )
         }
     }
@@ -214,7 +292,13 @@ private fun QuietClock(settings: AppSettings, temperature: Double?) {
 }
 
 @Composable
-private fun TimeAndAgenda(container: AppContainer, settings: AppSettings, modifier: Modifier) {
+private fun TimeAndAgenda(
+    container: AppContainer,
+    settings: AppSettings,
+    showClock: Boolean,
+    showAgenda: Boolean,
+    modifier: Modifier
+) {
     val snapshot by container.repository.snapshot.collectAsStateWithLifecycle()
     val now by rememberNow()
     val zone = remember { ZoneId.systemDefault() }
@@ -234,18 +318,20 @@ private fun TimeAndAgenda(container: AppContainer, settings: AppSettings, modifi
             .take(3)
     }
     Column(modifier) {
-        Clock(
-            use24h = settings.use24h,
-            style = MaterialTheme.typography.displayLarge.copy(fontSize = 128.sp, fontWeight = FontWeight.Light),
-            color = Color.White
-        )
-        Text(
-            now.format(DateLine),
-            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp),
-            color = Color.White.copy(alpha = 0.9f)
-        )
-        if (upcoming.isNotEmpty()) {
-            Spacer(Modifier.height(22.dp))
+        if (showClock) {
+            Clock(
+                use24h = settings.use24h,
+                style = MaterialTheme.typography.displayLarge.copy(fontSize = 128.sp, fontWeight = FontWeight.Light),
+                color = Color.White
+            )
+            Text(
+                now.format(DateLine),
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp),
+                color = Color.White.copy(alpha = 0.9f)
+            )
+        }
+        if (showAgenda && upcoming.isNotEmpty()) {
+            if (showClock) Spacer(Modifier.height(22.dp))
             Column(
                 Modifier
                     .width(460.dp)
@@ -288,34 +374,117 @@ private fun TimeAndAgenda(container: AppContainer, settings: AppSettings, modifi
     }
 }
 
+/** Compact scoreboard with CDN logos and legible fallbacks, designed for the 18-inch display. */
 @Composable
 private fun ScoreCard(game: Game, use24h: Boolean, fresh: Boolean) {
     Column(
         Modifier
-            .width(320.dp)
-            .glass(RoundedCornerShape(24.dp), fill = Frosted, border = FrostEdge)
-            .padding(18.dp)
+            .width(340.dp)
+            .glass(
+                RoundedCornerShape(24.dp),
+                fill = Color(0xFF101B2B).copy(alpha = 0.92f),
+                border = Color.White.copy(alpha = 0.22f)
+            )
+            .padding(horizontal = 18.dp, vertical = 15.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = LeagueNames[game.league] ?: game.league.uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White.copy(alpha = 0.88f),
+                LeagueNames[game.league] ?: game.league.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.82f),
                 modifier = Modifier.weight(1f)
             )
             if (game.state == "in" && fresh) {
                 LiveDot()
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
             }
-            Text(if (fresh) status(game, use24h) else if (game.state == "pre") "Saved schedule" else "Saved score", style = MaterialTheme.typography.labelLarge, color = Color.White)
+            val result = when {
+                !fresh -> "SAVED"
+                game.state == "in" -> "LIVE"
+                else -> "FINAL"
+            }
+            Box(
+                Modifier.clip(CircleShape)
+                    .background(if (game.state == "in" && fresh) Color(0xFF194E3B) else Color.White.copy(alpha = 0.14f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(result, style = MaterialTheme.typography.labelSmall, color = Color.White)
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        DottedDivider(color = Color.White.copy(alpha = 0.18f))
-        Spacer(Modifier.height(12.dp))
-        TeamLine(game.away, game)
-        Spacer(Modifier.height(10.dp))
-        TeamLine(game.home, game)
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            ScoreboardTeam(game.away, Modifier.weight(1f))
+            Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "${game.away?.score ?: "–"}  –  ${game.home?.score ?: "–"}",
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 23.sp),
+                    color = Color.White,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (fresh) status(game, use24h) else "Last saved result",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFD2DCE9),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            ScoreboardTeam(game.home, Modifier.weight(1f))
+        }
     }
+}
+
+@Composable
+private fun ScoreboardTeam(side: GameSide?, modifier: Modifier = Modifier) {
+    if (side == null) return
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        val logo = side.logo?.takeIf { candidate ->
+            runCatching {
+                val uri = java.net.URI(candidate)
+                uri.scheme == "https" && (uri.host == "espncdn.com" || uri.host?.endsWith(".espncdn.com") == true)
+            }.getOrDefault(false)
+        }
+        Box(
+            Modifier.size(54.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.13f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (logo == null) TeamInitials(side)
+            else SubcomposeAsyncImage(
+                model = logo,
+                contentDescription = "${side.name} logo",
+                contentScale = ContentScale.Fit,
+                loading = { TeamInitials(side) },
+                error = { TeamInitials(side) },
+                modifier = Modifier.size(43.dp)
+            )
+        }
+        Spacer(Modifier.height(7.dp))
+        Text(
+            side.abbr.ifEmpty { side.name.take(3) },
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1
+        )
+        Text(
+            side.name,
+            color = Color(0xFFD1DCE8),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun TeamInitials(side: GameSide) {
+    Text(
+        side.abbr.ifEmpty { side.name.take(3) },
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White
+    )
 }
 
 @Composable
@@ -328,39 +497,6 @@ private fun LiveDot() {
         label = "liveAlpha"
     )
     Box(Modifier.size(8.dp).alpha(alpha).clip(CircleShape).background(Color.White))
-}
-
-@Composable
-private fun TeamLine(side: GameSide?, game: Game) {
-    if (side == null) return
-    val other = if (side === game.home) game.away else game.home
-    val mine = side.score?.toIntOrNull()
-    val theirs = other?.score?.toIntOrNull()
-    val dimmed = game.state == "post" && mine != null && theirs != null && mine < theirs
-    val ink = if (dimmed) Color.White.copy(alpha = 0.78f) else Color.White
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(
-                width = 46.dp,
-                height = 30.dp
-            ).glass(RoundedCornerShape(9.dp), fill = Color.White.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(side.abbr.ifEmpty { side.name.take(3) }, style = MaterialTheme.typography.labelLarge, color = ink)
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = side.name,
-            style = MaterialTheme.typography.titleMedium,
-            color = ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (game.state != "pre") {
-            Text(side.score ?: "", style = MaterialTheme.typography.headlineSmall, color = ink)
-        }
-    }
 }
 
 private fun status(game: Game, use24h: Boolean): String {

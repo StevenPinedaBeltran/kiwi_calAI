@@ -136,64 +136,74 @@ fun WeatherPill(report: WeatherReport?, onClick: () -> Unit) {
     }
 }
 
-/** The weather card that floats over photos in sleep mode. */
+/** Dark atmospheric smart-display card, readable over photos in either system theme. */
 @Composable
 fun SleepWeatherCard(report: WeatherReport, use24h: Boolean, modifier: Modifier = Modifier) {
     val now = report.current
     val today = report.daily.firstOrNull()
+    val ink = Color.White
+    val secondary = Color(0xFFDCE8F7)
     Column(
-        modifier
-            .width(460.dp)
+        modifier.width(460.dp)
             .glass(
                 RoundedCornerShape(30.dp),
-                fill = Mono.Paper.copy(alpha = 0.38f),
-                border = Mono.Ink.copy(alpha = 0.16f)
+                fill = Color(0xFF142941).copy(alpha = 0.94f),
+                border = Color.White.copy(alpha = 0.23f)
             )
-            .padding(26.dp)
+            .padding(23.dp)
     ) {
+        Text("LOCAL FORECAST", color = secondary, style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            WeatherIcon(now.code, now.isDay, Modifier.size(76.dp))
-            Spacer(Modifier.width(20.dp))
-            Text(
-                temp(now.temp),
-                style = MaterialTheme.typography.displayLarge.copy(fontSize = 72.sp),
-                color = Mono.Ink
-            )
-            Spacer(Modifier.width(18.dp))
-            Column {
-                Text(now.condition, style = MaterialTheme.typography.titleLarge, color = Mono.Ink)
-                Text(
-                    "Feels like ${temp(now.feelsLike)}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Mono.Muted
-                )
-                if (today != null) {
-                    Text(
-                        "H ${temp(today.high)}   L ${temp(today.low)}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Mono.Muted
-                    )
+            WeatherIcon(now.code, now.isDay, Modifier.size(76.dp), ink)
+            Spacer(Modifier.width(15.dp))
+            Column(Modifier.weight(1f)) {
+                Text(temp(now.temp), style = MaterialTheme.typography.displayLarge.copy(fontSize = 70.sp), color = ink)
+                Text(now.condition, style = MaterialTheme.typography.titleLarge, color = ink)
+                Text("Feels like ${temp(now.feelsLike)}", color = secondary, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (today != null) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("H ${temp(today.high)}", color = ink, style = MaterialTheme.typography.titleMedium)
+                    Text("L ${temp(today.low)}", color = secondary, style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
-        Spacer(Modifier.height(20.dp))
-        DottedDivider(color = Mono.Ink.copy(alpha = 0.2f))
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(16.dp))
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.10f))
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("RAIN", color = secondary, style = MaterialTheme.typography.labelSmall)
+                Text("${today?.precipProb?.roundToInt()?.let { "$it%" } ?: "–"}", color = ink, style = MaterialTheme.typography.titleMedium)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("HUMIDITY", color = secondary, style = MaterialTheme.typography.labelSmall)
+                Text("${now.humidity?.roundToInt()?.let { "$it%" } ?: "–"}", color = ink, style = MaterialTheme.typography.titleMedium)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("WIND", color = secondary, style = MaterialTheme.typography.labelSmall)
+                Text(now.windSpeed?.roundToInt()?.let { "$it ${report.labels.speed}" } ?: "–", color = ink, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        Spacer(Modifier.height(15.dp))
+        Text("NEXT HOURS", color = secondary, style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             report.hourly.take(6).forEachIndexed { index, hour ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val label = if (index ==
-                        0
-                    ) {
-                        "Now"
-                    } else {
-                        localTime(hour.time)?.let { formatTime(it.toLocalTime(), use24h) } ?: ""
-                    }
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = Mono.Muted)
+                    Text(
+                        if (index == 0) "Now" else localTime(hour.time)?.let { formatTime(it.toLocalTime(), use24h) } ?: "–",
+                        style = MaterialTheme.typography.labelSmall, color = secondary
+                    )
                     Spacer(Modifier.height(8.dp))
-                    WeatherIcon(hour.code, hour.isDay, Modifier.size(28.dp))
-                    Spacer(Modifier.height(8.dp))
-                    Text(temp(hour.temp), style = MaterialTheme.typography.titleMedium, color = Mono.Ink)
+                    WeatherIcon(hour.code, hour.isDay, Modifier.size(28.dp), ink)
+                    Spacer(Modifier.height(7.dp))
+                    Text(temp(hour.temp), style = MaterialTheme.typography.titleSmall, color = ink)
                 }
             }
         }

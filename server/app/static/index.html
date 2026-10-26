@@ -11,9 +11,9 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="app.css?v=4">
   <link rel="stylesheet" href="polish.css?v=3">
-  <link rel="stylesheet" href="widgets.css?v=1">
+  <link rel="stylesheet" href="widgets.css?v=42">
   <script type="module" src="app.js?v=6"></script>
-  <script type="module" src="widgets.js?v=1"></script>
+  <script type="module" src="widgets.js?v=42"></script>
 </head>
 <body>
   <div class="shell">
@@ -130,14 +130,20 @@
               <div id="weather-places" class="place-results" aria-live="polite"></div>
               <p id="weather-message" class="widget-message" aria-live="polite">Choose a location to see your forecast.</p>
               <div id="weather-results" hidden>
-                <div class="weather-primary"><div><span class="widget-muted" id="weather-city"></span><strong id="weather-temperature">—</strong><span id="weather-condition">—</span></div><div class="weather-overview"><span id="weather-feels">—</span><span id="weather-hilo">—</span><span id="weather-rain">—</span></div></div>
+                <div class="weather-atmosphere">
+                  <div class="weather-eyeline"><span class="weather-pin" aria-hidden="true">⌖</span><span id="weather-city"></span><span id="weather-age" class="weather-age"></span></div>
+                  <div class="weather-primary"><div class="weather-illustration" id="weather-art" aria-hidden="true"></div><div class="weather-temperature-stack"><strong id="weather-temperature">—</strong><span id="weather-condition">—</span><span id="weather-hilo">—</span></div></div>
+                  <div class="weather-facts"><div><span class="weather-fact-symbol" aria-hidden="true">◉</span><strong id="weather-rain">—</strong><small>RAIN CHANCE</small></div><div><span class="weather-fact-symbol" aria-hidden="true">♢</span><strong id="weather-humidity">—</strong><small>HUMIDITY</small></div><div><span class="weather-fact-symbol" aria-hidden="true">≋</span><strong id="weather-wind">—</strong><small>WIND</small></div></div>
+                </div>
+                <div class="weather-subheading"><strong>Next hours</strong><span id="weather-feels">—</span></div>
                 <div class="weather-hours" id="weather-hours"></div>
+                <div class="weather-tomorrow" id="weather-tomorrow" hidden></div>
                 <div class="widget-foot"><span id="weather-updated">—</span><span>Powered by Open-Meteo</span></div>
               </div>
             </article>
             <article class="surface live-widget sports-widget">
               <div class="panel-titleline compact">
-                <div><div class="surface-eyebrow">06 / YOUR TEAMS</div><h2>Sports scores</h2></div>
+                <div><div class="surface-eyebrow">06 / YOUR TEAMS</div><h2>Recent scores</h2><p class="widget-muted">Only games from the past 7 days</p></div>
                 <button id="sports-refresh" type="button" class="quiet small" title="Refresh scores">↻ Refresh</button>
               </div>
               <div class="widget-controls sports-controls"><label>League<select id="sports-league"><option value="">Loading leagues…</option></select></label><label>Team<select id="sports-team"><option value="">Choose a league</option></select></label><button type="button" class="quiet small" id="sports-add">+ Follow</button></div>
