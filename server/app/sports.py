@@ -66,7 +66,7 @@ def parse_event(league: str, event: dict[str, Any]) -> dict[str, Any]:
 
 
 def pick_game(games: list[dict[str, Any]], today: date, tz: tzinfo) -> dict[str, Any] | None:
-    """Live beats today's game, which beats the latest final, which beats the next game."""
+    """Live, then today, then the next seven days, then the most recent final."""
 
     def rank(game: dict[str, Any]) -> tuple[int, float]:
         start = datetime.fromisoformat(game["start"])
@@ -74,9 +74,11 @@ def pick_game(games: list[dict[str, Any]], today: date, tz: tzinfo) -> dict[str,
             return (0, 0)
         if start.astimezone(tz).date() == today:
             return (1, start.timestamp())
+        if game["state"] == "pre" and 0 <= (start.astimezone(tz).date() - today).days <= 7:
+            return (2, start.timestamp())
         if game["state"] == "post":
-            return (2, -start.timestamp())
-        return (3, start.timestamp())
+            return (3, -start.timestamp())
+        return (4, start.timestamp())
 
     return min(games, key=rank) if games else None
 
@@ -124,7 +126,8 @@ class Sports:
         params = {"limit": "300", **extra}
         if not weekly:
             today = datetime.now(self.tz).date()
-            params["dates"] = f"{today - timedelta(days=1):%Y%m%d}-{today + timedelta(days=1):%Y%m%d}"
+            # Today's-only ranges left the family display empty most off-days.
+            params["dates"] = f"{today - timedelta(days=3):%Y%m%d}-{today + timedelta(days=14):%Y%m%d}"
         data = await self._get(f"{BASE}/{path}/scoreboard", params, ttl=60)
         games = []
         for event in data.get("events", []):
@@ -134,23 +137,54 @@ class Sports:
                 continue
         return games
 
+    async def team_schedule(self, league: str, team_id: str) -> list[dict[str, Any]]:
+        """Fallback for bye weeks, days between games, and leagues with short scoreboards.
+
+        ESPN's site API is unofficial; failures must not turn into fabricated games.
+        """
+        path = LEAGUES[league][1]
+        data = await self._get(
+            f"{BASE}/{path}/teams/{team_id}/schedule", {"limit": "500"}, ttl=600
+        )
+        games = []
+        for event in data.get("events") or []:
+            try:
+                games.append(parse_event(league, event))
+            except (KeyError, IndexError, TypeError, ValueError):
+                continue
+        return games
+
     async def scores(self, teams: list[tuple[str, str]]) -> list[dict[str, Any]]:
         today = datetime.now(self.tz).date()
         boards: dict[str, list[dict[str, Any]]] = {}
         result: dict[str, dict[str, Any]] = {}
-        for league, team_id in teams:
-            if league not in LEAGUES:
-                continue
+        valid = [(league, team_id) for league, team_id in teams if league in LEAGUES and team_id.isdigit()]
+        if not valid:
+            return []
+        failures = 0
+        for league, team_id in valid:
             if league not in boards:
                 try:
                     boards[league] = await self.scoreboard(league)
-                except httpx.HTTPError:
+                except (httpx.HTTPError, ValueError, KeyError):
                     boards[league] = []
+                    failures += 1
             mine = [
                 g for g in boards[league]
                 if team_id in {(g["home"] or {}).get("id"), (g["away"] or {}).get("id")}
             ]
+            # A weekly scoreboard can omit teams on a bye; a finished game can
+            # remain the 'latest' for days. Check the team schedule for the next fixture.
+            if not any(g["state"] == "in" or
+                       (g["state"] == "pre" and datetime.fromisoformat(g["start"]).astimezone(self.tz).date() >= today)
+                       for g in mine):
+                try:
+                    mine.extend(await self.team_schedule(league, team_id))
+                except (httpx.HTTPError, ValueError, KeyError):
+                    pass  # The scoreboard is still usable when schedule lookup fails.
             game = pick_game(mine, today, self.tz)
             if game:
                 result.setdefault(f"{league}:{game['id']}", game)
-        return list(result.values())
+        if failures and not result:
+            raise httpx.HTTPError("Sports provider is unavailable")
+        return sorted(result.values(), key=lambda g: (g["state"] != "in", g["start"]))

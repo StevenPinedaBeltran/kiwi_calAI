@@ -76,8 +76,61 @@ TEAMS = {"sports": [{"leagues": [{"teams": [
 ]}]}]}
 
 
+def _hours(start: str, count: int) -> list[str]:
+    from datetime import datetime, timedelta
+    first = datetime.fromisoformat(start)
+    return [(first + timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M") for i in range(count)]
+
+
+FORECAST = {
+    "utc_offset_seconds": -18000,
+    "current_units": {"visibility": "ft"},
+    "current": {
+        "time": "2026-10-25T14:15", "temperature_2m": 61.4, "relative_humidity_2m": 48,
+        "apparent_temperature": 59.9, "is_day": 1, "precipitation": 0.0, "weather_code": 2,
+        "cloud_cover": 40, "pressure_msl": 1016.2, "wind_speed_10m": 9.3, "wind_direction_10m": 225,
+        "wind_gusts_10m": 17.0, "uv_index": 3.1, "visibility": 52800, "dew_point_2m": 41.0,
+    },
+    "hourly": {
+        "time": _hours("2026-10-25T00:00", 48),
+        "temperature_2m": [50 + i % 12 for i in range(48)],
+        "weather_code": [2] * 48,
+        "is_day": [1 if 7 <= i % 24 < 18 else 0 for i in range(48)],
+        "precipitation_probability": [i % 100 for i in range(48)],
+    },
+    "daily": {
+        "time": ["2026-10-25", "2026-10-26"],
+        "weather_code": [2, 61],
+        "temperature_2m_max": [63.0, 58.2],
+        "temperature_2m_min": [47.1, 45.9],
+        "sunrise": ["2026-10-25T07:16", "2026-10-26T07:17"],
+        "sunset": ["2026-10-25T17:56", "2026-10-26T17:55"],
+        "uv_index_max": [3.4, 2.0],
+        "precipitation_probability_max": [10, 80],
+        "precipitation_sum": [0.0, 0.42],
+        "wind_speed_10m_max": [12.1, 18.4],
+    },
+}
+
+AIR = {"current": {"us_aqi": 42, "european_aqi": 21, "pm2_5": 8.24, "pm10": 12.0}}
+
+GEOCODE = {"results": [
+    {"name": "Mount Prospect", "latitude": 42.0664, "longitude": -87.9373, "country": "United States", "admin1": "Illinois"},
+]}
+
+AIR_DOWN = {"enabled": False}
+
+
 def fake_internet(request: httpx.Request) -> httpx.Response:
     url = str(request.url)
+    if url.startswith("https://api.open-meteo.com/v1/forecast"):
+        return httpx.Response(200, json=FORECAST)
+    if url.startswith("https://air-quality-api.open-meteo.com/"):
+        if AIR_DOWN["enabled"]:
+            return httpx.Response(503)
+        return httpx.Response(200, json=AIR)
+    if url.startswith("https://geocoding-api.open-meteo.com/"):
+        return httpx.Response(200, json=GEOCODE)
     if url.startswith("https://calendar.example/feed.ics"):
         return httpx.Response(200, content=ICS)
     if url.startswith("https://photos.app.goo.gl/album"):

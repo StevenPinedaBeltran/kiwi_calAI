@@ -3,128 +3,229 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#22553a">
-  <title>Kiwi Calendar</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="Kiwi Calendar control center — keep your family calendar, photos, and connected feeds in sync.">
+  <title>Kiwi Calendar — Control Center</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="app.css">
-  <script type="module" src="app.js"></script>
+  <link rel="stylesheet" href="app.css?v=4">
+  <link rel="stylesheet" href="polish.css?v=3">
+  <link rel="stylesheet" href="widgets.css?v=1">
+  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="widgets.js?v=1"></script>
 </head>
 <body>
-  <div class="brand">
-    <span class="brand-mark" aria-hidden="true"></span>
-    <span class="brand-name">Kiwi Calendar</span>
-  </div>
-  <header class="masthead">
-    <div class="date-block" aria-hidden="true">
-      <span class="date-day" id="today-day"></span>
-    </div>
-    <div class="date-words">
-      <span class="date-weekday" id="today-weekday"></span>
-      <span class="date-month" id="today-month"></span>
-    </div>
-  </header>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Kiwi Calendar">
+        <span class="brand-symbol" aria-hidden="true">k</span>
+        <span class="brand-name">kiwi<span class="brand-dot">.</span>calendar</span>
+        <span class="brand-divider">/</span>
+        <span class="brand-context">family hub</span>
+      </div>
+      <div class="topbar-right">
+        <button type="button" class="theme-switch" id="theme-switch" title="Toggle light or dark mode" aria-label="Switch to light mode">☼ <span id="theme-label">Light mode</span></button>
+        <span class="environment"><span class="environment-icon">⌁</span> home dashboard</span>
+        <span class="separator"></span>
+        <span class="live-label"><span class="live-indicator"></span><span id="server-status-text">server status</span></span>
+      </div>
+    </header>
 
-  <main>
-    <section id="login" class="panel" hidden>
-      <h1>Connect to your calendar</h1>
-      <p class="muted" id="login-message">Scan the QR code on the calendar, or enter the access token from the server log.</p>
-      <form id="login-form" class="stack">
-        <label>Access token
-          <input name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-        </label>
-        <button type="submit">Connect</button>
-      </form>
+    <section id="login" class="login-wrap" hidden>
+      <div class="login-panel surface">
+        <div class="eyebrow"><span class="tiny-glyph">◈</span> PRIVATE WORKSPACE / ACCESS</div>
+        <div class="login-mark"><span class="brand-symbol">k</span> kiwi.calendar</div>
+        <h1>Your calendar.<br><em>All in one place.</em></h1>
+        <p class="muted" id="login-message">Enter the access token from your Kiwi Calendar server, or scan the QR code displayed on your calendar.</p>
+        <form id="login-form" class="stack">
+          <label>ACCESS TOKEN
+            <input name="token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your access token" required>
+          </label>
+          <button type="submit" class="button-primary">Connect to calendar <span aria-hidden="true">↗</span></button>
+        </form>
+        <p class="login-help">Find your token with <code>docker compose logs kiwi --tail=40</code></p>
+      </div>
     </section>
 
     <div id="app" hidden>
+      <div class="workspace-head">
+        <div>
+          <div class="eyebrow">YOUR SPACE <span class="eyebrow-slash">/</span> THE OVERVIEW</div>
+          <h1>Your family, <em>in sync.</em></h1>
+          <p class="head-subtitle">One place to plan the day, organize events, and keep your display up to date.</p>
+        </div>
+        <div class="date-meta" aria-label="Today's date">
+          <span class="date-icon" id="today-day"></span>
+          <span><span class="date-weekday" id="today-weekday"></span><span class="date-month" id="today-month"></span></span>
+        </div>
+      </div>
+
       <nav class="tabs" role="tablist" aria-label="Sections">
-        <button role="tab" id="tab-btn-add" aria-controls="tab-add" data-tab="add">Add</button>
-        <button role="tab" id="tab-btn-upcoming" aria-controls="tab-upcoming" data-tab="upcoming">Coming up</button>
-        <button role="tab" id="tab-btn-photos" aria-controls="tab-photos" data-tab="photos">Photos</button>
-        <button role="tab" id="tab-btn-calendars" aria-controls="tab-calendars" data-tab="calendars">Calendars</button>
+        <button role="tab" id="tab-btn-dashboard" aria-controls="tab-dashboard" data-tab="dashboard"><span aria-hidden="true">◫</span> Home</button>
+        <button role="tab" id="tab-btn-add" aria-controls="tab-add" data-tab="add"><span aria-hidden="true">＋</span> New event</button>
+        <button role="tab" id="tab-btn-upcoming" aria-controls="tab-upcoming" data-tab="upcoming"><span aria-hidden="true">▤</span> Agenda</button>
+        <button role="tab" id="tab-btn-photos" aria-controls="tab-photos" data-tab="photos"><span aria-hidden="true">▧</span> Photos</button>
+        <button role="tab" id="tab-btn-calendars" aria-controls="tab-calendars" data-tab="calendars"><span aria-hidden="true">⊞</span> Calendars</button>
+        <div class="nav-tail"><span class="nav-tail-label">YOUR HOUSEHOLD</span><p>The things that matter,<br>in one place.</p><span class="nav-tail-foot">KIWI / FAMILY HUB</span></div>
       </nav>
 
-      <section id="tab-add" role="tabpanel" aria-labelledby="tab-btn-add" class="panel">
-        <form id="event-form" class="stack">
-          <label>What
-            <input name="title" required maxlength="200" placeholder="Soccer practice">
-          </label>
-          <div class="row">
-            <label class="grow">Day
-              <input type="date" name="date" required>
-            </label>
-            <label class="check">
-              <input type="checkbox" name="all_day"> All day
-            </label>
+      <main>
+        <section id="tab-dashboard" role="tabpanel" aria-labelledby="tab-btn-dashboard" class="dashboard mono-home">
+          <div class="overview-actions">
+            <div class="overview-summary"><span class="status-dot" aria-hidden="true"></span><span id="overview-day-label">YOUR FAMILY CALENDAR</span><span class="summary-sep">/</span><span id="overview-summary">Loading your schedule…</span></div>
+            <div class="overview-buttons">
+              <button type="button" class="quiet small" id="home-refresh" title="Reload the calendar and status">↻ Refresh</button>
+              <button type="button" class="button-primary small" id="home-add">＋ New event</button>
+            </div>
           </div>
-          <div class="row" id="time-row">
-            <label class="grow">Starts
-              <input type="time" name="start" value="09:00">
-            </label>
-            <label class="grow">Ends
-              <input type="time" name="end" value="10:00">
-            </label>
+          <div class="home-grid">
+            <article class="surface monthly-surface">
+              <div class="panel-titleline">
+                <div><div class="surface-eyebrow">01 / THE FAMILY CALENDAR</div><h2 id="calendar-month-label">October 2026</h2></div>
+                <div class="calendar-controls">
+                  <button type="button" class="quiet cal-today" id="calendar-today">Today</button>
+                  <button type="button" class="square-button" id="calendar-prev" aria-label="Previous month">‹</button>
+                  <button type="button" class="square-button" id="calendar-next" aria-label="Next month">›</button>
+                </div>
+              </div>
+              <div class="calendar-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+              <div id="calendar-grid" class="calendar-month-grid" role="group" aria-label="Calendar days"></div>
+              <div class="calendar-footer"><span><i class="legend-key important"></i> Important</span><span><i class="legend-key family"></i> Family</span><span><i class="legend-key work"></i> Work</span><span><i class="legend-key personal"></i> Personal</span><span class="calendar-hint">Select a day to see its plans</span></div>
+            </article>
+            <aside class="surface day-surface">
+              <div class="surface-eyebrow">02 / SELECTED DAY</div>
+              <div class="day-header"><div><div class="day-weekday" id="selected-weekday">Sunday</div><div class="day-date" id="selected-full-date">October 25</div></div><div class="day-count" id="selected-count">—</div></div>
+              <div id="selected-day-agenda" class="selected-day-agenda"><p class="muted">Loading…</p></div>
+              <button type="button" class="day-add" id="day-add">＋ Add an event to this day <span>↗</span></button>
+            </aside>
+            <article class="surface next-surface">
+              <div class="panel-titleline compact"><div><div class="surface-eyebrow">03 / WHAT'S NEXT</div><h2>On the horizon</h2></div><button type="button" class="text-action" data-go-tab="upcoming">Full agenda ↗</button></div>
+              <div id="next-events" class="next-list"><p class="muted">Loading upcoming plans…</p></div>
+            </article>
+            <article class="surface status-surface">
+              <div class="panel-titleline compact"><div><div class="surface-eyebrow">04 / HOME DISPLAY</div><h2>Connected & ready</h2></div></div>
+              <div class="status-rows">
+                <button class="status-row" type="button" data-go-tab="calendars"><span class="status-row-icon">▦</span><span class="status-row-text"><strong>Calendar feeds</strong><small id="feed-health">Checking sources…</small></span><span class="status-row-count" id="stat-feeds">—</span><span class="status-row-arrow">↗</span></button>
+                <button class="status-row" type="button" data-go-tab="photos"><span class="status-row-icon">▧</span><span class="status-row-text"><strong>Photo library</strong><small id="photo-health">Checking photos…</small></span><span class="status-row-count" id="stat-photos">—</span><span class="status-row-arrow">↗</span></button>
+                <div class="status-row"><span class="status-row-icon">⌁</span><span class="status-row-text"><strong>Server sync</strong><small id="server-health">Checking connection…</small></span><span id="server-badge" class="connection-badge">CHECKING</span></div>
+              </div>
+              <div class="sync-actions"><button id="home-sync-feeds" type="button" class="quiet small">↻ Sync calendar feeds</button><button id="home-sync-photos" type="button" class="quiet small">↻ Refresh photos</button></div>
+              <div class="device-help"><strong>On your Android calendar</strong><p>Use this computer's local IP address with port <code>8088</code> in the Kiwi app's server settings. Both devices should be on the same network.</p><button type="button" id="copy-server-url" class="quiet small">Copy server address ↗</button><span class="device-hint" id="copy-hint">localhost won't work on Android</span></div>
+            </article>
           </div>
-          <label><span>Where <span class="optional">optional</span></span>
-            <input name="location" maxlength="300">
-          </label>
-          <label><span>Notes <span class="optional">optional</span></span>
-            <textarea name="notes" rows="2" maxlength="4000"></textarea>
-          </label>
-          <fieldset class="swatches" id="event-colors">
-            <legend>Color</legend>
-          </fieldset>
-          <button type="submit">Add event</button>
-        </form>
-      </section>
-
-      <section id="tab-upcoming" role="tabpanel" aria-labelledby="tab-btn-upcoming" class="panel" hidden>
-        <div id="upcoming-list" class="agenda"></div>
-      </section>
-
-      <section id="tab-photos" role="tabpanel" aria-labelledby="tab-btn-photos" class="panel" hidden>
-        <h2>Shared album</h2>
-        <p class="muted">In Google Photos, open an album, tap Share, then Create link. Paste the link here. The server checks the album for new photos every night.</p>
-        <form id="album-form" class="stack">
-          <label>Album link
-            <input name="url" type="url" inputmode="url" placeholder="https://photos.app.goo.gl/…" required>
-          </label>
-          <div class="row">
-            <button type="submit">Save album link</button>
-            <button type="button" class="quiet" id="album-refresh">Check now</button>
+          <div class="live-widgets" aria-label="Weather and sports widgets">
+            <article class="surface live-widget weather-widget">
+              <div class="panel-titleline compact">
+                <div><div class="surface-eyebrow">05 / LOCAL FORECAST</div><h2>Weather</h2></div>
+                <button id="weather-refresh" type="button" class="quiet small" title="Refresh forecast">↻ Refresh</button>
+              </div>
+              <div class="widget-controls">
+                <form id="weather-place-form" class="widget-search" autocomplete="off">
+                  <label for="weather-location">Location</label>
+                  <div class="widget-control-row"><input id="weather-location" placeholder="Search city or ZIP" minlength="2" required><button type="submit" class="quiet small">Find</button></div>
+                </form>
+                <label class="widget-units">Units<select id="weather-units"><option value="imperial">°F / mph</option><option value="metric">°C / km/h</option></select></label>
+              </div>
+              <div id="weather-places" class="place-results" aria-live="polite"></div>
+              <p id="weather-message" class="widget-message" aria-live="polite">Choose a location to see your forecast.</p>
+              <div id="weather-results" hidden>
+                <div class="weather-primary"><div><span class="widget-muted" id="weather-city"></span><strong id="weather-temperature">—</strong><span id="weather-condition">—</span></div><div class="weather-overview"><span id="weather-feels">—</span><span id="weather-hilo">—</span><span id="weather-rain">—</span></div></div>
+                <div class="weather-hours" id="weather-hours"></div>
+                <div class="widget-foot"><span id="weather-updated">—</span><span>Powered by Open-Meteo</span></div>
+              </div>
+            </article>
+            <article class="surface live-widget sports-widget">
+              <div class="panel-titleline compact">
+                <div><div class="surface-eyebrow">06 / YOUR TEAMS</div><h2>Sports scores</h2></div>
+                <button id="sports-refresh" type="button" class="quiet small" title="Refresh scores">↻ Refresh</button>
+              </div>
+              <div class="widget-controls sports-controls"><label>League<select id="sports-league"><option value="">Loading leagues…</option></select></label><label>Team<select id="sports-team"><option value="">Choose a league</option></select></label><button type="button" class="quiet small" id="sports-add">+ Follow</button></div>
+              <div id="sports-followed" class="team-tags" aria-label="Followed teams"></div>
+              <p id="sports-message" class="widget-message" aria-live="polite">Select a league and team to follow.</p>
+              <div id="sports-results" class="scores-results"></div>
+              <div class="widget-foot"><span id="sports-updated">—</span><span>Data from ESPN · unofficial feed</span></div>
+            </article>
           </div>
-        </form>
-        <p id="album-status" class="status"></p>
-        <button type="button" class="link danger" id="album-remove" hidden>Remove album and its photos</button>
-
-        <h2>Pick from your Google account</h2>
-        <div id="google-box"></div>
-      </section>
-
-      <section id="tab-calendars" role="tabpanel" aria-labelledby="tab-btn-calendars" class="panel" hidden>
-        <p class="muted">Show another calendar by its iCal link. In Google Calendar on a computer, open Settings, pick the calendar, and copy “Secret address in iCal format”.</p>
-        <ul id="feed-list" class="feeds"></ul>
-        <form id="feed-form" class="stack">
-          <label>Name
-            <input name="name" required maxlength="80" placeholder="Work">
-          </label>
-          <label>iCal link
-            <input name="url" type="url" inputmode="url" required placeholder="https://calendar.google.com/calendar/ical/…">
-          </label>
-          <fieldset class="swatches" id="feed-colors">
-            <legend>Color</legend>
-          </fieldset>
-          <div class="row">
-            <button type="submit">Add calendar</button>
-            <button type="button" class="quiet" id="feeds-refresh">Refresh all now</button>
+          <div class="home-extras">
+            <article class="surface home-metric"><span class="metric-symbol">▤</span><span class="metric-label">EVENTS THIS MONTH</span><strong id="month-event-count">—</strong><small>On the family calendar</small></article>
+            <article class="surface home-metric"><span class="metric-symbol">⌁</span><span class="metric-label">CONNECTED CALENDARS</span><strong id="home-feed-count">—</strong><small>Subscribed sources</small></article>
+            <article class="surface home-metric"><span class="metric-symbol">▧</span><span class="metric-label">YOUR PHOTOS</span><strong id="home-photo-count">—</strong><small>Saved for the display</small></article>
+            <article class="surface home-gallery">
+              <div class="gallery-head"><div><div class="surface-eyebrow">FAMILY MEMORIES</div><h2>On your display</h2></div><button class="text-action" type="button" data-go-tab="photos">Manage photos ↗</button></div>
+              <div class="photo-strip" id="home-photo-strip"><p class="muted">Connect Google Photos to bring your memories here.</p></div>
+            </article>
           </div>
-        </form>
-      </section>
+          <footer class="dashboard-footer"><span>KIWI CALENDAR / YOUR FAMILY, ALL IN ONE PLACE</span><span id="dashboard-updated">LAST CHECKED / —</span></footer>
+        </section>
+
+        <section id="tab-add" role="tabpanel" aria-labelledby="tab-btn-add" class="page-section" hidden>
+          <div class="section-intro"><div class="eyebrow">01 / NEW ENTRY</div><h2>Add something <em>good.</em></h2><p class="muted">Create an event and it will sync to your calendar.</p></div>
+          <div class="form-panel surface">
+            <form id="event-form" class="stack">
+              <label>EVENT NAME
+                <input name="title" required maxlength="200" placeholder="Soccer practice, dinner, a day out…">
+              </label>
+              <div class="row">
+                <label class="grow">DATE
+                  <input type="date" name="date" required>
+                </label>
+                <label class="grow">END DATE
+                  <input type="date" name="end_date" required>
+                </label>
+                <label class="check"><input type="checkbox" name="all_day"> All day</label>
+              </div>
+              <div class="row" id="time-row">
+                <label class="grow">START TIME<input type="time" name="start" value="09:00"></label>
+                <label class="grow">END TIME<input type="time" name="end" value="10:00"></label>
+              </div>
+              <label>LOCATION <span class="optional">OPTIONAL</span><input name="location" maxlength="300" placeholder="Where is it happening?"></label>
+              <label>NOTES <span class="optional">OPTIONAL</span><textarea name="notes" rows="3" maxlength="4000" placeholder="Anything worth remembering…"></textarea></label>
+              <fieldset class="swatches" id="event-colors"><legend>EVENT COLOR</legend></fieldset>
+              <div class="row form-submit-row"><button type="submit" class="button-primary" id="save-event-button">Add event <span aria-hidden="true">↗</span></button><button type="button" class="quiet" id="cancel-edit" hidden>Cancel editing</button></div>
+            </form>
+          </div>
+        </section>
+
+        <section id="tab-upcoming" role="tabpanel" aria-labelledby="tab-btn-upcoming" class="page-section" hidden>
+          <div class="section-intro"><div class="eyebrow">02 / THE PLAN</div><h2>Coming <em>up.</em></h2><p class="muted">All your events, in order.</p></div>
+          <div class="form-panel surface"><div class="agenda-toolbar"><label class="agenda-search"><span class="search-icon">⌕</span><input id="agenda-search-input" type="search" placeholder="Search events or places…" aria-label="Search upcoming events"></label><label class="agenda-filter"><span>SHOW</span><select id="agenda-source-filter" aria-label="Filter by source"><option value="all">All calendars</option><option value="local">Events I added</option><option value="subscribed">Subscribed calendars</option></select></label></div><p id="agenda-results" class="agenda-results"></p><div id="upcoming-list" class="agenda"></div></div>
+        </section>
+
+        <section id="tab-photos" role="tabpanel" aria-labelledby="tab-btn-photos" class="page-section" hidden>
+          <div class="section-intro"><div class="eyebrow">03 / YOUR MEMORIES</div><h2>Photo <em>library.</em></h2><p class="muted">Bring your favorite moments onto the calendar.</p></div>
+          <div class="form-panel surface">
+            <h3>Shared album</h3>
+            <p class="muted">In Google Photos, open an album, tap Share, then Create link. Paste the link here. The server checks for new photos every night.</p>
+            <form id="album-form" class="stack">
+              <label>GOOGLE PHOTOS ALBUM LINK<input name="url" type="url" inputmode="url" placeholder="https://photos.app.goo.gl/…" required></label>
+              <div class="row"><button type="submit" class="button-primary">Save album link</button><button type="button" class="quiet" id="album-refresh">Check now ↻</button></div>
+            </form>
+            <p id="album-status" class="status"></p>
+            <div class="library-preview-heading"><h3>Photos saved on Kiwi</h3><span id="library-preview-count">0 photos</span></div>
+            <div id="library-photo-strip" class="library-photo-strip"><p class="muted">Photos from a connected album will appear here.</p></div>
+            <button type="button" class="link danger" id="album-remove" hidden>Remove album and its photos</button>
+            <div class="section-divider"></div><h3>Pick from your Google account</h3><div id="google-box"></div>
+          </div>
+        </section>
+
+        <section id="tab-calendars" role="tabpanel" aria-labelledby="tab-btn-calendars" class="page-section" hidden>
+          <div class="section-intro"><div class="eyebrow">04 / STAY CONNECTED</div><h2>Connected <em>calendars.</em></h2><p class="muted">Bring all your dates into the same view.</p></div>
+          <div class="form-panel surface">
+            <p class="muted">Add an iCal link to show events from another calendar. For Google Calendar, open Settings on a computer, select your calendar, and copy the Secret address in iCal format.</p>
+            <ul id="feed-list" class="feeds"></ul><div class="section-divider"></div><h3>Add a calendar</h3>
+            <form id="feed-form" class="stack">
+              <label>CALENDAR NAME<input name="name" required maxlength="80" placeholder="Work, school, family…"></label>
+              <label>ICAL LINK<input name="url" type="url" inputmode="url" required placeholder="https://calendar.google.com/calendar/ical/…"></label>
+              <fieldset class="swatches" id="feed-colors"><legend>CALENDAR COLOR</legend></fieldset>
+              <div class="row"><button type="submit" class="button-primary">Add calendar</button><button type="button" class="quiet" id="feeds-refresh">Refresh all now ↻</button></div>
+            </form>
+          </div>
+        </section>
+      </main>
     </div>
-  </main>
-
+  </div>
+  <dialog id="event-dialog" class="event-dialog" aria-labelledby="detail-title"><div class="dialog-top"><span class="surface-eyebrow">EVENT DETAILS</span><button type="button" class="dialog-close" id="detail-close" aria-label="Close event details">×</button></div><h2 id="detail-title"></h2><div id="detail-meta" class="detail-meta"></div><div id="detail-extra" class="detail-extra"></div><div class="dialog-actions"><button type="button" class="button-primary" id="detail-edit">Edit event</button><button type="button" class="quiet danger" id="detail-delete">Delete</button><button type="button" class="quiet" id="detail-done">Close</button></div></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

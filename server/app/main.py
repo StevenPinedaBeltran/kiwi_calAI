@@ -4,7 +4,7 @@ import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import httpx
@@ -21,6 +21,7 @@ from .models import AlbumIn, EventIn, FeedIn
 from .photos import PhotoLibrary
 from .scheduler import daily
 from .sports import LEAGUES, Sports
+from .weather import UNITS, Weather
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("kiwi")
@@ -41,6 +42,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     library = PhotoLibrary(db, settings, client)
     google = GooglePhotos(db, settings, client, library)
     sports = Sports(client, settings.tz)
+    weather = Weather(client)
     background: set[asyncio.Task] = set()
 
     def spawn(coro) -> None:
@@ -99,6 +101,17 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     @app.get("/api/events", dependencies=auth)
     def list_events(days: int = Query(default=60, ge=1, le=FUTURE_DAYS)) -> list[dict]:
         return events.events_between(db, *window(0, days))
+
+    @app.get("/api/events/range", dependencies=auth)
+    def list_events_range(
+        start: date = Query(...), end: date = Query(...)
+    ) -> list[dict]:
+        """Events overlapping a calendar window. End date is exclusive."""
+        if end <= start or (end - start).days > 62:
+            raise HTTPException(422, "Choose a date range between 1 and 62 days")
+        from_dt = datetime.combine(start, time(), settings.tz)
+        until_dt = datetime.combine(end, time(), settings.tz)
+        return events.events_between(db, int(from_dt.timestamp()), int(until_dt.timestamp()))
 
     def save_event(event_id: str, event: EventIn) -> dict:
         if not EVENT_ID.match(event_id):
@@ -236,7 +249,32 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             league, _, team_id = item.strip().partition(":")
             if league and team_id:
                 refs.append((league, team_id))
-        return await sports.scores(refs[:40])
+        try:
+            return await sports.scores(refs[:40])
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"Sports service unavailable: {exc}") from exc
+
+    # Weather
+
+    @app.get("/api/weather", dependencies=auth)
+    async def get_weather(
+        lat: float = Query(ge=-90, le=90),
+        lon: float = Query(ge=-180, le=180),
+        units: str = "imperial",
+    ) -> dict:
+        if units not in UNITS:
+            raise HTTPException(422, "units must be imperial or metric")
+        try:
+            return await weather.forecast(lat, lon, units)
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise HTTPException(502, f"Weather service unavailable: {exc}") from exc
+
+    @app.get("/api/weather/search", dependencies=auth)
+    async def search_places(q: str = Query(min_length=2, max_length=100)) -> list[dict]:
+        try:
+            return await weather.search(q)
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"Place search unavailable: {exc}") from exc
 
     app.mount("/", StaticFiles(directory=STATIC, html=True), name="web")
     return app
