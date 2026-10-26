@@ -130,7 +130,7 @@ class PhotoLibrary:
                         log.warning("Album photo failed: %s", exc)
                 stale = existing - wanted.keys()
                 self.remove(stale)
-                if added and not stale:
+                if added or stale:
                     self.db.bump_revision()
                 self.db.put("album_last_sync", str(int(time.time())))
                 self.db.delete("album_error")

@@ -29,10 +29,15 @@ class Repository(
     private val pending = MutableStateFlow(store.loadPending())
     private val _scores = MutableStateFlow(store.loadScores())
     private val _status = MutableStateFlow(SyncStatus(lastSuccess = _snapshot.value.syncedAt))
+    // A persisted score without a recent successful refresh must never be called LIVE.
+    private val _scoresFetchedAt = MutableStateFlow(0L)
+    private val _weather = MutableStateFlow(store.loadWeather())
 
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
     val scores: StateFlow<List<Game>> = _scores.asStateFlow()
+    val scoresFetchedAt: StateFlow<Long> = _scoresFetchedAt.asStateFlow()
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
+    val weather: StateFlow<WeatherReport?> = _weather.asStateFlow()
 
     fun launchSync() {
         scope.launch { sync() }
@@ -78,7 +83,13 @@ class Repository(
             return
         }
         val dayOld = System.currentTimeMillis() - current.syncedAt > DAY_MS
-        if (dayOld || remoteRevision != current.revision || pending.value.isNotEmpty()) {
+        // Photos can be deleted by a cleanup, storage pressure, or a partial download
+        // without changing the server revision. Repair these on the next poll.
+        val missingPhoto = current.photos.any { photo ->
+            val file = store.photoFile(photo.id)
+            !file.isFile || file.length() < 100L
+        }
+        if (dayOld || missingPhoto || remoteRevision != current.revision || pending.value.isNotEmpty()) {
             sync()
         } else if (_status.value.error != null) {
             _status.update { it.copy(error = null) }
@@ -93,17 +104,45 @@ class Repository(
         val current = settings.value
         if (!current.isPaired || current.teams.isEmpty()) {
             _scores.value = emptyList()
+            _scoresFetchedAt.value = 0L
+            store.saveScores(emptyList())
             return
         }
         try {
             val games = api.scores(current.teams)
             _scores.value = games
+            _scoresFetchedAt.value = System.currentTimeMillis()
             store.saveScores(games)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // Keep showing the last scores we had.
         }
+    }
+
+    suspend fun refreshWeather() {
+        val current = settings.value
+        val place = current.weatherPlace ?: run {
+            _weather.value = null
+            return
+        }
+        if (!current.isPaired) return
+        // Don't show a previous city's temperature while a new city is loading.
+        val cached = _weather.value
+        if (cached != null && !cached.matches(place, current.units)) _weather.value = null
+        try {
+            val report = api.weather(place, current.units).copy(fetchedAt = System.currentTimeMillis())
+            _weather.value = report
+            store.saveWeather(report)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Keep the last report; the UI shows how old it is.
+        }
+    }
+
+    fun launchWeatherRefresh() {
+        scope.launch { refreshWeather() }
     }
 
     private fun enqueue(op: PendingOp) {
@@ -131,13 +170,21 @@ class Repository(
 
     private suspend fun syncPhotos(remote: List<Photo>): List<Photo> {
         val wanted = remote.mapTo(HashSet()) { it.id }
+        // Don't delete cached photos until after remote metadata is available.
         store.photoDir.listFiles()?.forEach { file ->
-            if (file.name.substringBefore('.') !in wanted) file.delete()
+            if (file.extension == "jpg" && file.nameWithoutExtension !in wanted) file.delete()
+            if (file.extension == "part") file.delete()
         }
-        return remote.filter { photo ->
+        remote.forEach { photo ->
             val file = store.photoFile(photo.id)
-            file.exists() || runCatching { api.downloadPhoto(photo.id, file) }.isSuccess
+            if (!file.isFile || file.length() < 100L) {
+                // One broken image must not abort the slideshow or lose metadata.
+                runCatching { api.downloadPhoto(photo.id, file) }
+            }
         }
+        // Retain the server's photo list even for failed downloads. The next
+        // syncIfStale() detects missing files and retries instead of waiting 24h.
+        return remote
     }
 
     private companion object {
@@ -154,3 +201,9 @@ private fun applyOps(events: List<Event>, ops: List<PendingOp>): List<Event> {
     }
     return byId.values.toList()
 }
+
+/** Coordinate and unit changes must never display the previous forecast as current. */
+fun WeatherReport.matches(place: WeatherPlace, units: String): Boolean =
+    latitude != null && longitude != null && this.units == units &&
+        kotlin.math.abs(latitude - place.latitude) < 0.011 &&
+        kotlin.math.abs(longitude - place.longitude) < 0.011

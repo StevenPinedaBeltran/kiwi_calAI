@@ -151,7 +151,7 @@ def test_teams_and_scores(client):
     assert game["start"] == "2026-10-25T18:00:00+00:00"
 
 
-def test_pick_game_prefers_live_then_today_then_latest_final():
+def test_pick_game_prefers_live_then_today_then_next_game_then_latest_final():
     tz = ZoneInfo("America/Chicago")
     today = date(2026, 10, 25)
 
@@ -164,7 +164,7 @@ def test_pick_game_prefers_live_then_today_then_latest_final():
     live = game("in", "2026-10-25T18:00:00+00:00")
     assert pick_game([final, upcoming, tonight, live], today, tz) is live
     assert pick_game([final, upcoming, tonight], today, tz) is tonight
-    assert pick_game([final, upcoming], today, tz) is final
+    assert pick_game([final, upcoming], today, tz) is upcoming
     assert pick_game([upcoming], today, tz) is upcoming
 
 
@@ -173,3 +173,23 @@ def test_seconds_until_rolls_to_tomorrow():
     now = datetime(2026, 10, 25, 4, 0, tzinfo=tz)
     assert seconds_until("03:00", tz, now) == 23 * 3600
     assert seconds_until("05:30", tz, now) == 5400
+
+
+def test_calendar_range_supports_past_and_overlapping_events(client):
+    original = client.post(
+        "/api/events", headers=AUTH,
+        json={"title": "Family break", "start": "2026-10-10", "end": "2026-10-14", "all_day": True},
+    )
+    assert original.status_code == 201
+    response = client.get("/api/events/range?start=2026-10-12&end=2026-10-20", headers=AUTH)
+    assert response.status_code == 200
+    assert any(e["title"] == "Family break" for e in response.json())
+    # End of an all-day event is exclusive: October 14 should not be counted.
+    response = client.get("/api/events/range?start=2026-10-14&end=2026-10-16", headers=AUTH)
+    assert all(e["title"] != "Family break" for e in response.json())
+
+
+def test_calendar_range_requires_token_and_limits_size(client):
+    assert client.get("/api/events/range?start=2026-10-01&end=2026-11-01").status_code == 401
+    assert client.get("/api/events/range?start=2026-11-01&end=2026-10-01", headers=AUTH).status_code == 422
+    assert client.get("/api/events/range?start=2026-10-01&end=2027-01-01", headers=AUTH).status_code == 422

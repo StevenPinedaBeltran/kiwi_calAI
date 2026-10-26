@@ -1,7 +1,9 @@
 package dev.kiwicalendar.data
 
 import java.io.File
+import android.graphics.BitmapFactory
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,6 +43,12 @@ class ServerApi(private val settings: () -> AppSettings) {
         return get("/api/scores?teams=$query", ListSerializer(Game.serializer()))
     }
 
+    suspend fun weather(place: WeatherPlace, units: String): WeatherReport =
+        get("/api/weather?lat=${place.latitude}&lon=${place.longitude}&units=$units", WeatherReport.serializer())
+
+    suspend fun searchPlaces(query: String): List<WeatherPlace> =
+        get("/api/weather/search?q=${URLEncoder.encode(query, "UTF-8")}", ListSerializer(WeatherPlace.serializer()))
+
     suspend fun putEvent(event: Event) {
         val body = AppJson.encodeToString(Event.serializer(), event).toRequestBody(JSON)
         call(request("/api/events/${event.id}").put(body).build())
@@ -55,8 +63,21 @@ class ServerApi(private val settings: () -> AppSettings) {
             if (!response.isSuccessful) throw ApiException("Photo download failed (${response.code})", response.code)
             val body = response.body ?: throw ApiException("Empty photo response")
             val partial = File(dest.parentFile, dest.name + ".part")
-            partial.outputStream().use { out -> body.byteStream().use { it.copyTo(out) } }
-            if (!partial.renameTo(dest)) throw IOException("Couldn't save photo $id")
+            try {
+                partial.outputStream().use { out -> body.byteStream().use { it.copyTo(out) } }
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(partial.absolutePath, opts)
+                if (opts.outWidth <= 0 || opts.outHeight <= 0) {
+                    throw IOException("Invalid image received for photo $id")
+                }
+                if (!partial.renameTo(dest)) {
+                    // Some Android filesystems need the old destination removed first.
+                    if (dest.exists() && !dest.delete()) throw IOException("Couldn't replace photo $id")
+                    if (!partial.renameTo(dest)) throw IOException("Couldn't save photo $id")
+                }
+            } finally {
+                partial.delete()
+            }
         }
     }
 

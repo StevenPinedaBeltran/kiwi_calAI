@@ -1,0 +1,28 @@
+/* Real family-weather and followed-sports cards, sharing Android's light/dark palette. */
+.live-widgets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:13px}
+.live-widget{padding:20px;min-width:0}.live-widget .panel-titleline{margin-bottom:16px}
+.widget-controls{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.widget-controls label{display:flex;flex-direction:column;gap:6px;font:500 11px Outfit,sans-serif;color:var(--muted);min-width:0}
+.widget-search{flex:1;min-width:170px}.widget-search label{display:block;margin-bottom:6px}
+.widget-control-row{display:flex;gap:6px}.widget-control-row input{flex:1;min-width:0}
+.widget-controls input,.widget-controls select{padding:9px!important;min-height:38px;font-size:12px!important;max-width:100%;width:100%;color:var(--text)!important;background:var(--soft)!important}
+.widget-units{width:110px}.sports-controls label{flex:1;min-width:112px}.sports-controls button{min-height:38px}
+.widget-message{color:var(--muted);font:400 12px/1.55 Outfit,sans-serif;min-height:20px;margin:8px 0}
+.place-results{display:flex;flex-wrap:wrap;gap:6px}.place-choice,.team-tag{background:var(--soft);border:1px solid var(--stroke);border-radius:10px;padding:8px 10px;color:var(--text);font:500 11px Outfit,sans-serif;text-align:left}
+.place-choice:hover,.team-tag:hover{background:var(--hover)}
+.widget-muted{color:var(--muted);font:500 11px Outfit,sans-serif}
+.weather-primary{display:flex;gap:14px;justify-content:space-between;align-items:end;border-top:1px solid var(--stroke-soft);padding:16px 0 17px}
+.weather-primary>div:first-child{display:flex;flex-direction:column;gap:5px}.weather-primary strong{font:400 57px/1 Outfit,sans-serif;letter-spacing:-2px;color:var(--text)}
+.weather-primary #weather-condition{font:500 14px Outfit,sans-serif;color:var(--text)}
+.weather-overview{display:flex;flex-direction:column;gap:8px;align-items:flex-end;text-align:right;color:var(--muted);font-size:12px}
+.weather-hours{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid var(--stroke-soft);padding:15px 0;gap:4px}
+.weather-hour{display:flex;flex-direction:column;align-items:center;gap:9px;min-width:0}.weather-hour strong{font:500 15px Outfit,sans-serif;color:var(--text)}.weather-hour small{color:var(--muted);font-size:10px}
+.team-tags{display:flex;gap:6px;flex-wrap:wrap}.team-tag{border-radius:99px}
+.sports-game{border:1px solid var(--stroke);border-radius:13px;background:var(--soft);padding:12px;margin:9px 0}
+.game-meta,.game-side{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.game-meta{font-size:10px;color:var(--muted);letter-spacing:.25px;margin-bottom:10px}.game-meta strong{font-size:11px;font-weight:600;color:var(--text);text-align:right}
+.game-sides{display:flex;flex-direction:column;gap:7px}.game-side{font-size:13px;color:var(--text)}.game-side strong{font-size:14px}
+.widget-foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--stroke-soft);padding-top:12px;margin-top:12px;color:var(--muted);font-size:10px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+@media(max-width:1090px){.live-widgets{grid-template-columns:1fr}}
+@media(max-width:620px){.live-widget{padding:15px}.weather-primary strong{font-size:48px}.widget-controls{align-items:stretch}.widget-units{width:100px}.weather-hours{gap:0}.weather-hour strong{font-size:13px}}

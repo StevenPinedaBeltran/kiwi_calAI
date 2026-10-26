@@ -44,9 +44,23 @@ class MainActivity :
         val container = appContainer
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                while (true) {
-                    container.repository.syncIfStale()
-                    delay(POLL_INTERVAL_MS)
+                launch {
+                    while (true) {
+                        container.repository.syncIfStale()
+                        delay(POLL_INTERVAL_MS)
+                    }
+                }
+                launch {
+                    while (true) {
+                        container.repository.refreshScores()
+                        delay(SCORE_INTERVAL_MS)
+                    }
+                }
+                launch {
+                    while (true) {
+                        container.repository.refreshWeather()
+                        delay(WEATHER_INTERVAL_MS)
+                    }
                 }
             }
         }
@@ -93,5 +107,7 @@ class MainActivity :
     private companion object {
         /** How often to ask the server whether anything changed (events added from a phone, etc). */
         const val POLL_INTERVAL_MS = 2 * 60 * 1000L
+        const val WEATHER_INTERVAL_MS = 15 * 60 * 1000L
+        const val SCORE_INTERVAL_MS = 2 * 60 * 1000L
     }
 }
